@@ -21,12 +21,15 @@ import (
 const rendezvousString = "libp2p-mdns"
 const chunkSize = 3
 
-var receivedChunks = sync.Map{}
-var sentChunks = sync.Map{}
-var nodeMutex = sync.Mutex{}
-var expectedChunks = 3
-var connectedPeers []peer.AddrInfo
-var node1ID peer.ID
+var (
+    receivedChunks = sync.Map{}
+    sentChunks     = sync.Map{}
+    nodeMutex      = sync.Mutex{}
+    expectedChunks = 3 // Each node expects to receive 3 chunks (change as needed)
+    connectedPeers []peer.AddrInfo
+    node1ID        peer.ID // Variable to store the ID of Node 1
+    receivedFrom   = sync.Map{} // Tracks from which peer each node received chunks
+)
 
 func main() {
 	nodeID := flag.String("node", "", "Node ID")
@@ -102,27 +105,44 @@ func main() {
 				fmt.Printf("Warning: No chunk found for peer %s\n", pi.ID.String())
 				continue
 			}
-
+	
 			nodeData := receivedChunk.(*NodeData)
 			for index, chunk := range nodeData.received {
-				for _, peerInfo := range connectedPeers {
-					if peerInfo.ID != pi.ID && peerInfo.ID.String() != *nodeID && peerInfo.ID != node1ID {
-						if _, ok := sentChunks.Load(peerInfo.ID.String() + chunk); !ok {
-							SendChunk(ctx, h, peerInfo, index, chunk)
-							sentChunks.Store(peerInfo.ID.String()+chunk, struct{}{})
+				// Construct the key to check the origin of this chunk
+				receivedFromKey := fmt.Sprintf("%s-%d", pi.ID.String(), index)
+				origSender, senderOk := receivedFrom.Load(receivedFromKey)
+				// fmt.Printf("Chunk %d from %s originally from %s\n", index, pi.ID.String(), origSender)
+	
+				// Check if the chunk was received directly from Node 1
+				if senderOk && origSender.(string) == node1ID.String() {
+					// fmt.Printf("Propagating chunk %d from %s originally from Node1\n", index, pi.ID.String())
+					for _, peerInfo := range connectedPeers {
+						if peerInfo.ID != pi.ID && peerInfo.ID.String() != *nodeID && peerInfo.ID != node1ID {
+							chunkKey := fmt.Sprintf("%s-%d", peerInfo.ID.String(), index)
+							if _, ok := sentChunks.Load(chunkKey); !ok {
+								fmt.Printf("Sending chunk %d to %s\n", index, peerInfo.ID.String())
+								SendChunk(ctx, h, peerInfo, index, chunk)
+								sentChunks.Store(chunkKey, struct{}{})
+							} else {
+								fmt.Printf("Chunk %d already sent to %s\n", index, peerInfo.ID.String())
+							}
 						}
 					}
 				}
 			}
 		}
 	}()
+	
+	
+		
+	
 
 	go func() {
 		reader := bufio.NewReader(os.Stdin)
 		for {
 			text, _ := reader.ReadString('\n')
 			if strings.TrimSpace(text) != "show" {
-				PrintReceivedChunks()
+				PrintReceivedChunks(*nodeID)
 			}
 		}
 	}()
