@@ -3,7 +3,7 @@ Asynchronous verifiable information dispersal with libp2p in golang
 
 Manual running:
 ```go
-go run . -node=Node<ID>
+go run ./cmd/. -node=Node<ID>
 ```
 
 Automatic running:
