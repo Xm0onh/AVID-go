@@ -11,7 +11,7 @@ Automatic running:
 ./StartNodes.sh
 ```
 
-Stop the all the nodes:
+Stop all the nodes:
 ```terminal
 ps aux | grep go | grep -v grep | awk '{print $2}' | xargs kill -9
 ```
