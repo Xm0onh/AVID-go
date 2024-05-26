@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Number of regular nodes to start
-NUM_NODES=10
+NUM_NODES=4
 PORT_BASE=4007
 BOOTSTRAP_PORT_BASE=4001
-BOOTSTRAP_NODES=5
+BOOTSTRAP_NODES=2
 BOOTSTRAP_READY_TIMEOUT=30
 IP_BASE="127.0.0."
 
@@ -13,8 +13,12 @@ setup_ip_aliases() {
     for i in $(seq 1 $((BOOTSTRAP_NODES + NUM_NODES))); do
         ip_suffix=$((i + 1))
         ip="${IP_BASE}${ip_suffix}"
-        sudo ifconfig lo0 alias $ip
-        echo "Aliased $ip to loopback interface."
+        if ! ifconfig lo0 | grep -q "$ip"; then
+            sudo ifconfig lo0 alias $ip
+            echo "Aliased $ip to loopback interface."
+        else
+            echo "$ip is already aliased to loopback interface."
+        fi
     done
 }
 
@@ -37,7 +41,7 @@ for i in $(seq 1 $BOOTSTRAP_NODES)
 do
     ip_suffix=$((i + 1))
     ip="${IP_BASE}${ip_suffix}"
-    osascript -e 'tell application "Terminal" to do script "cd '$(pwd)' && go run ./cmd/main.go -node=BootstrapNode'$i' -port='$((BOOTSTRAP_PORT_BASE + i - 1))' -bootstrap=true -ip='$ip'"'
+    osascript -e "tell application \"Terminal\" to do script \"cd '$(pwd)' && go run ./cmd/main.go -node=BootstrapNode$i -port=$((BOOTSTRAP_PORT_BASE + i - 1)) -bootstrap=true -ip=$ip\""
 done
 
 # Wait for all bootstrap nodes to be ready
@@ -62,15 +66,16 @@ echo "cd $(pwd) && go run ./cmd/main.go -node=Node1 -port=4006 -ip=${IP_BASE}7"
 
 # Start Node 1 automatically
 osascript -e "tell application \"Terminal\" to do script \"cd '$(pwd)' && go run ./cmd/main.go -node=Node1 -port=4006 -ip=${IP_BASE}7\""
+sleep 5
 
 # Start the rest of the regular nodes
 for i in $(seq 2 $((NUM_NODES + 1)))
 do
     ip_suffix=$((i + 6))
     ip="${IP_BASE}${ip_suffix}"
-    osascript -e 'tell application "Terminal" to do script "cd '$(pwd)' && go run ./cmd/main.go -node=Node'$i' -port='$(($PORT_BASE + i - 2))' -ip='$ip'"'
+    osascript -e "tell application \"Terminal\" to do script \"cd '$(pwd)' && go run ./cmd/main.go -node=Node$i -port=$((PORT_BASE + i - 2)) -ip=$ip\""
     sleep 10
-    echo "Node$i started on port $(($PORT_BASE + i - 2)) with IP $ip"
+    echo "Node$i started on port $((PORT_BASE + i - 2)) with IP $ip"
 done
 
 echo "$NUM_NODES nodes started in separate terminal windows, excluding Node 1 which should be started manually."

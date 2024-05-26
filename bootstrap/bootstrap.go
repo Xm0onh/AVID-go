@@ -7,10 +7,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	crypto "github.com/libp2p/go-libp2p/core/crypto"
+	noise "github.com/libp2p/go-libp2p/p2p/security/noise"
+	tls "github.com/libp2p/go-libp2p/p2p/security/tls"
 	"github.com/multiformats/go-multiaddr"
 )
 
@@ -18,13 +21,29 @@ func StartBootstrapNode(port int, ip string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	priv, _, _ := crypto.GenerateKeyPairWithReader(crypto.Ed25519, 2048, rand.Reader)
-	addr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%d", ip, port))
-	h, err := libp2p.New(libp2p.Identity(priv), libp2p.ListenAddrs(addr))
+	priv, _, err := crypto.GenerateKeyPairWithReader(crypto.Ed25519, 2048, rand.Reader)
+	if err != nil {
+		fmt.Println("Error generating key pair:", err)
+		os.Exit(1)
+	}
+
+	addr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%d", ip, port))
+	if err != nil {
+		fmt.Println("Error creating multiaddr:", err)
+		os.Exit(1)
+	}
+
+	h, err := libp2p.New(
+		libp2p.Identity(priv),
+		libp2p.ListenAddrs(addr),
+		libp2p.Security(tls.ID, tls.New),
+		libp2p.Security(noise.ID, noise.New))
 	if err != nil {
 		fmt.Println("Error creating libp2p host:", err)
 		os.Exit(1)
 	}
+
+	fmt.Printf("Bootstrap node %s is listening on %s:%d with Peer ID %s...\n", ip, port, h.ID())
 
 	kadDHT, err := dht.New(ctx, h)
 	if err != nil {
@@ -58,6 +77,22 @@ func StartBootstrapNode(port int, ip string) {
 		fmt.Printf("Address: %s/p2p/%s\n", addr, h.ID().String())
 	}
 
+	// Ensure the DHT has some time to populate
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				if len(kadDHT.RoutingTable().ListPeers()) > 0 {
+					break
+				}
+				time.Sleep(2 * time.Second)
+			}
+		}
+	}()
+
+	// Handle OS signals to gracefully shutdown
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 	<-c

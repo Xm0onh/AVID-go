@@ -12,6 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	mdns "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	routingdisc "github.com/libp2p/go-libp2p/p2p/discovery/routing"
+	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/multiformats/go-multiaddr"
 )
 
@@ -25,20 +26,6 @@ func DiscoveryHandler(h host.Host, peerChan chan peer.AddrInfo) {
 		os.Exit(1)
 	}
 
-	// Set up DHT
-	kadDHT, err := dht.New(context.Background(), h)
-	if err != nil {
-		fmt.Println("Error creating DHT:", err)
-		os.Exit(1)
-	}
-
-	if err = kadDHT.Bootstrap(context.Background()); err != nil {
-		fmt.Println("Error bootstrapping DHT:", err)
-		os.Exit(1)
-	}
-
-	routingDiscovery := routingdisc.NewRoutingDiscovery(kadDHT)
-
 	// Read bootstrap addresses from file
 	file, err := os.Open("bootstrap_addrs.txt")
 	if err != nil {
@@ -47,6 +34,7 @@ func DiscoveryHandler(h host.Host, peerChan chan peer.AddrInfo) {
 	}
 	defer file.Close()
 
+	var bootstrapPeers []peer.AddrInfo
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		addr := scanner.Text()
@@ -60,24 +48,46 @@ func DiscoveryHandler(h host.Host, peerChan chan peer.AddrInfo) {
 			fmt.Println("Error converting multiaddr to peer.AddrInfo:", err)
 			continue
 		}
-		peerChan <- *pi
-		h.Connect(context.Background(), *pi)
+		bootstrapPeers = append(bootstrapPeers, *pi)
 	}
 
 	if err := scanner.Err(); err != nil {
 		fmt.Println("Error reading file:", err)
 	}
 
+	// Set up DHT with bootstrap peers
+	ctx := context.Background()
+	kadDHT, err := dht.New(ctx, h, dht.BootstrapPeers(bootstrapPeers...))
+	if err != nil {
+		fmt.Println("Error creating DHT:", err)
+		os.Exit(1)
+	}
+
+	if err = kadDHT.Bootstrap(ctx); err != nil {
+		fmt.Println("Error bootstrapping DHT:", err)
+		os.Exit(1)
+	}
+
+	// Log bootstrap connections
+	for _, peerInfo := range bootstrapPeers {
+		if err := h.Connect(ctx, peerInfo); err != nil {
+			fmt.Printf("Error connecting to bootstrap peer %s: %v\n", peerInfo.ID, err)
+		} else {
+			fmt.Printf("Connected to bootstrap peer: %s\n", peerInfo.ID)
+		}
+	}
+
+	// Wait a bit to let bootstrapping finish
+	time.Sleep(1 * time.Second)
+
+	routingDiscovery := routingdisc.NewRoutingDiscovery(kadDHT)
+	dutil.Advertise(ctx, routingDiscovery, rendezvousString)
+	fmt.Println("Successfully advertised!")
+
 	go func() {
 		for {
-			// Advertise the rendezvous string
-			_, err := routingDiscovery.Advertise(context.Background(), rendezvousString)
-			if err != nil {
-				fmt.Println("Error advertising:", err)
-			}
-
 			// Find peers using the rendezvous string
-			peers, err := routingDiscovery.FindPeers(context.Background(), rendezvousString)
+			peers, err := routingDiscovery.FindPeers(ctx, rendezvousString)
 			if err != nil {
 				fmt.Println("Error finding peers:", err)
 				continue
@@ -91,7 +101,7 @@ func DiscoveryHandler(h host.Host, peerChan chan peer.AddrInfo) {
 				peerChan <- p
 			}
 
-			time.Sleep(1 * time.Minute) 
+			time.Sleep(1 * time.Minute)
 		}
 	}()
 }
