@@ -17,6 +17,8 @@ import (
 	crypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/multiformats/go-multiaddr"
+	BT "github.com/xm0onh/AVID-go/bootstrap"
 	"github.com/xm0onh/AVID-go/config"
 	"github.com/xm0onh/AVID-go/handlers"
 	"github.com/xm0onh/AVID-go/rs"
@@ -24,15 +26,12 @@ import (
 
 var broadcastSignal = make(chan struct{})
 
-const (
-	rendezvousString = "libp2p-mdns"
-	dataShards       = 2
-	parityShards     = 1
-	expectedChunks   = dataShards + parityShards
-)
-
 func main() {
 	nodeID := flag.String("node", "", "Node ID")
+	bootstrap := flag.Bool("bootstrap", false, "Start as bootstrap node")
+	port := flag.Int("port", 0, "Port to listen on")
+	ip := flag.String("ip", "127.0.0.1", "IP address to listen on")
+
 	flag.Parse()
 
 	if *nodeID == "" {
@@ -40,9 +39,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *bootstrap {
+		BT.StartBootstrapNode(*port, *ip)
+		return
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	priv, _, _ := crypto.GenerateKeyPairWithReader(crypto.Ed25519, 2048, rand.Reader)
-	h, _ := libp2p.New(libp2p.Identity(priv))
+	addr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%d", *ip, *port))
+	h, err := libp2p.New(libp2p.Identity(priv), libp2p.ListenAddrs(addr))
+	if err != nil {
+		fmt.Println("Error creating libp2p host:", err)
+		os.Exit(1)
+	}
 
 	var wg sync.WaitGroup
 	peerChan := make(chan peer.AddrInfo)
@@ -58,7 +67,7 @@ func main() {
 		go handlers.HandleReadyStream(s, h, &wg)
 	})
 
-	go handlers.DiscoveryHandler(h, peerChan, rendezvousString)
+	go handlers.DiscoveryHandler(h, peerChan)
 
 	go func() {
 		c := make(chan os.Signal, 1)
@@ -68,7 +77,7 @@ func main() {
 		cancel()
 		h.Close()
 		wg.Wait()
-		os.Exit(0)
+		os.Exit(1)
 	}()
 
 	fmt.Printf("Node %s is listening...\n", *nodeID)
@@ -76,7 +85,16 @@ func main() {
 	go func() {
 		for pi := range peerChan {
 			if err := h.Connect(ctx, pi); err != nil {
-				fmt.Println("Error connecting to peer:", err)
+				fmt.Printf("Error connecting to peer %s (retry %d): %v\n", pi.ID.String(), 0, err)
+				for i := 1; i <= 4; i++ {
+					time.Sleep(1 * time.Second) 
+					if err := h.Connect(ctx, pi); err == nil {
+						fmt.Printf("Node %s connected to %s\n", *nodeID, pi.ID.String())
+						break
+					} else {
+						fmt.Printf("Error connecting to peer %s (retry %d): %v\n", pi.ID.String(), i, err)
+					}
+				}
 				continue
 			}
 

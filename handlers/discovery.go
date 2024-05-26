@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -11,9 +12,12 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	mdns "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	routingdisc "github.com/libp2p/go-libp2p/p2p/discovery/routing"
+	"github.com/multiformats/go-multiaddr"
 )
 
-func DiscoveryHandler(h host.Host, peerChan chan peer.AddrInfo, rendezvousString string) {
+const rendezvousString = "libp2p-mdns"
+
+func DiscoveryHandler(h host.Host, peerChan chan peer.AddrInfo) {
 	// Set up mDNS
 	mdnsService := mdns.NewMdnsService(h, rendezvousString, &DiscoveryNotifee{peerChan: peerChan})
 	if err := mdnsService.Start(); err != nil {
@@ -34,6 +38,36 @@ func DiscoveryHandler(h host.Host, peerChan chan peer.AddrInfo, rendezvousString
 	}
 
 	routingDiscovery := routingdisc.NewRoutingDiscovery(kadDHT)
+
+	// Read bootstrap addresses from file
+	file, err := os.Open("bootstrap_addrs.txt")
+	if err != nil {
+		fmt.Println("Error opening file:", err)
+		os.Exit(1)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		addr := scanner.Text()
+		ma, err := multiaddr.NewMultiaddr(addr)
+		if err != nil {
+			fmt.Println("Error parsing multiaddr:", err)
+			continue
+		}
+		pi, err := peer.AddrInfoFromP2pAddr(ma)
+		if err != nil {
+			fmt.Println("Error converting multiaddr to peer.AddrInfo:", err)
+			continue
+		}
+		peerChan <- *pi
+		h.Connect(context.Background(), *pi)
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Println("Error reading file:", err)
+	}
+
 	go func() {
 		for {
 			// Advertise the rendezvous string
@@ -57,7 +91,7 @@ func DiscoveryHandler(h host.Host, peerChan chan peer.AddrInfo, rendezvousString
 				peerChan <- p
 			}
 
-			time.Sleep(1 * time.Minute)
+			time.Sleep(1 * time.Minute) 
 		}
 	}()
 }

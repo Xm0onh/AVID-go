@@ -1,16 +1,76 @@
 #!/bin/bash
 
-# Number of nodes to start
-NUM_NODES=20
+# Number of regular nodes to start
+NUM_NODES=10
+PORT_BASE=4007
+BOOTSTRAP_PORT_BASE=4001
+BOOTSTRAP_NODES=5
+BOOTSTRAP_READY_TIMEOUT=30
+IP_BASE="127.0.0."
 
-# Start Node 1 in the background
-# cd $(pwd)/cmd && go run . -node=Node1 &
+# Function to set up IP aliases
+setup_ip_aliases() {
+    for i in $(seq 1 $((BOOTSTRAP_NODES + NUM_NODES))); do
+        ip_suffix=$((i + 1))
+        ip="${IP_BASE}${ip_suffix}"
+        sudo ifconfig lo0 alias $ip
+        echo "Aliased $ip to loopback interface."
+    done
+}
 
-# Start the rest of the nodes in separate terminal windows
-for i in $(seq 2 $NUM_NODES)
+# Function to check if a bootstrap node is ready
+check_bootstrap_ready() {
+    local ip=$1
+    local port=$2
+    for i in $(seq 1 $BOOTSTRAP_READY_TIMEOUT); do
+        nc -z $ip $port && return 0
+        sleep 1
+    done
+    return 1
+}
+
+# Set up IP aliases
+setup_ip_aliases
+
+# Start the bootstrap nodes first
+for i in $(seq 1 $BOOTSTRAP_NODES)
 do
-    osascript -e 'tell application "Terminal" to do script "cd '$(pwd)' && cd ./cmd && go run . -node=Node'$i'"'
+    ip_suffix=$((i + 1))
+    ip="${IP_BASE}${ip_suffix}"
+    osascript -e 'tell application "Terminal" to do script "cd '$(pwd)' && go run ./cmd/main.go -node=BootstrapNode'$i' -port='$((BOOTSTRAP_PORT_BASE + i - 1))' -bootstrap=true -ip='$ip'"'
 done
 
-echo "$NUM_NODES nodes started. Node 1 in the background, others in separate terminal windows."
+# Wait for all bootstrap nodes to be ready
+for i in $(seq 1 $BOOTSTRAP_NODES)
+do
+    ip_suffix=$((i + 1))
+    ip="${IP_BASE}${ip_suffix}"
+    port=$((BOOTSTRAP_PORT_BASE + i - 1))
+    echo "Waiting for BootstrapNode$i on IP $ip and port $port to be ready..."
+    if ! check_bootstrap_ready $ip $port; then
+        echo "BootstrapNode$i on IP $ip and port $port did not become ready in time. Exiting..."
+        exit 1
+    fi
+    echo "BootstrapNode$i on IP $ip and port $port is ready."
+done
 
+echo "All bootstrap nodes are ready. Starting regular nodes in 10 seconds..."
+sleep 10
+
+echo "Node 1 can be started manually with the following command:"
+echo "cd $(pwd) && go run ./cmd/main.go -node=Node1 -port=4006 -ip=${IP_BASE}7"
+
+# Start Node 1 automatically
+osascript -e "tell application \"Terminal\" to do script \"cd '$(pwd)' && go run ./cmd/main.go -node=Node1 -port=4006 -ip=${IP_BASE}7\""
+
+# Start the rest of the regular nodes
+for i in $(seq 2 $((NUM_NODES + 1)))
+do
+    ip_suffix=$((i + 6))
+    ip="${IP_BASE}${ip_suffix}"
+    osascript -e 'tell application "Terminal" to do script "cd '$(pwd)' && go run ./cmd/main.go -node=Node'$i' -port='$(($PORT_BASE + i - 2))' -ip='$ip'"'
+    sleep 10
+    echo "Node$i started on port $(($PORT_BASE + i - 2)) with IP $ip"
+done
+
+echo "$NUM_NODES nodes started in separate terminal windows, excluding Node 1 which should be started manually."
