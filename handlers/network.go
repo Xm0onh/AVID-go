@@ -14,15 +14,10 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/xm0onh/AVID-go/rs"
+	"github.com/xm0onh/AVID-go/shared"
 )
 
-type NodeData struct {
-	originalData string
-	chunks       [][]byte
-	received     map[int][]byte
-}
-
-func HandleStream(s network.Stream, h host.Host, peerChan chan peer.AddrInfo, wg *sync.WaitGroup, nodeID string, node1ID *peer.ID, receivedFrom, receivedChunks, sentChunks *sync.Map, nodeMutex *sync.Mutex, counter *int, chunksRecByNode [][]byte, readyCounter *int, connectedPeers []peer.AddrInfo, expectedChunks int) {
+func HandleStream(s network.Stream, h host.Host, peerChan chan peer.AddrInfo, wg *sync.WaitGroup, nodeID string, expectedChunks int) {
 	defer s.Close()
 	defer wg.Done()
 
@@ -30,12 +25,12 @@ func HandleStream(s network.Stream, h host.Host, peerChan chan peer.AddrInfo, wg
 
 	reader := bufio.NewReader(s)
 
-	nodeMutex.Lock()
-	if *node1ID == "" {
-		*node1ID = s.Conn().RemotePeer()
-		fmt.Printf("Node %s set Node1ID to %s\n", nodeID, node1ID.String())
+	shared.NodeMutex.Lock()
+	if shared.Node1ID == "" {
+		shared.Node1ID = s.Conn().RemotePeer()
+		fmt.Printf("Node %s set Node1ID to %s\n", nodeID, shared.Node1ID.String())
 	}
-	nodeMutex.Unlock()
+	shared.NodeMutex.Unlock()
 
 	for {
 		var length uint32
@@ -67,19 +62,19 @@ func HandleStream(s network.Stream, h host.Host, peerChan chan peer.AddrInfo, wg
 
 		receivedFromKey := fmt.Sprintf("%s-%d", s.Conn().RemotePeer().String(), chunkIndex)
 		fmt.Printf("Storing origin %s for chunk %d\n", s.Conn().RemotePeer().String(), chunkIndex)
-		receivedFrom.Store(receivedFromKey, s.Conn().RemotePeer().String())
+		shared.ReceivedFrom.Store(receivedFromKey, s.Conn().RemotePeer().String())
 
-		StoreReceivedChunk(s.Conn().RemotePeer().String(), int(chunkIndex), receivedData, h, peerChan, nodeMutex, counter, chunksRecByNode, connectedPeers, sentChunks, receivedChunks, expectedChunks)
+		StoreReceivedChunk(s.Conn().RemotePeer().String(), int(chunkIndex), receivedData, h, peerChan, expectedChunks)
 
 		peerChan <- peer.AddrInfo{ID: s.Conn().RemotePeer()}
 	}
 }
 
-func HandleReadyStream(s network.Stream, h host.Host, wg *sync.WaitGroup, readyCounter *int, connectedPeers []peer.AddrInfo, expectedChunks int) {
+func HandleReadyStream(s network.Stream, h host.Host, wg *sync.WaitGroup, expectedChunks int) {
 	defer s.Close()
 	defer wg.Done()
 
-	(*readyCounter)++
+	shared.ReadyCounter++
 	reader := bufio.NewReader(s)
 	buf, err := reader.ReadString('\n')
 	if err != nil {
@@ -90,7 +85,7 @@ func HandleReadyStream(s network.Stream, h host.Host, wg *sync.WaitGroup, readyC
 
 	peerID := strings.TrimSpace(buf)
 	fmt.Printf("Ready message received for peer %s\n", peerID)
-	if *readyCounter == expectedChunks {
+	if shared.ReadyCounter == expectedChunks {
 		fmt.Println("All nodes are ready")
 	}
 }
@@ -147,66 +142,66 @@ func SendReady(ctx context.Context, h host.Host, pi peer.AddrInfo, peerID string
 	fmt.Printf("Sent ready message to %s for peer %s\n", pi.ID.String(), peerID)
 }
 
-func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host, peerChan chan peer.AddrInfo, nodeMutex *sync.Mutex, counter *int, chunksRecByNode [][]byte, connectedPeers []peer.AddrInfo, sentChunks *sync.Map, receivedChunks *sync.Map, expectedChunks int) {
-	nodeMutex.Lock()
-	defer nodeMutex.Unlock()
+func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host, peerChan chan peer.AddrInfo, expectedChunks int) {
+	shared.NodeMutex.Lock()
+	defer shared.NodeMutex.Unlock()
 
-	(*counter)++
-	data, ok := receivedChunks.Load(nodeID)
+	shared.Counter++
+	data, ok := shared.ReceivedChunks.Load(nodeID)
 	if !ok {
 		fmt.Println("NodeID not found in receivedChunks", nodeID)
-		data = &NodeData{received: make(map[int][]byte)}
-		receivedChunks.Store(nodeID, data)
+		data = &shared.NodeData{Received: make(map[int][]byte)}
+		shared.ReceivedChunks.Store(nodeID, data)
 	}
-	nodeData := data.(*NodeData)
-	chunksRecByNode[chunkIndex] = chunk
-	fmt.Println("counter", *counter)
-	fmt.Println("chunksRecByNode", chunksRecByNode)
-	if existingChunk, exists := nodeData.received[chunkIndex]; exists && bytes.Equal(existingChunk, chunk) {
+	nodeData := data.(*shared.NodeData)
+	shared.ChunksRecByNode[chunkIndex] = chunk
+	fmt.Println("counter", shared.Counter)
+	fmt.Println("chunksRecByNode", shared.ChunksRecByNode)
+	if existingChunk, exists := nodeData.Received[chunkIndex]; exists && bytes.Equal(existingChunk, chunk) {
 		fmt.Printf("Node %s already has chunk %d: %s\n", nodeID, chunkIndex, chunk)
 		return
 	}
 
-	nodeData.received[chunkIndex] = chunk
-	fmt.Printf("nodeid %s data %v\n", nodeID, nodeData.received)
+	nodeData.Received[chunkIndex] = chunk
+	fmt.Printf("nodeid %s data %v\n", nodeID, nodeData.Received)
 	fmt.Printf("Node %s received chunk %d: %s\n", nodeID, chunkIndex, chunk)
-	fmt.Println("Length of received chunks:", len(nodeData.received))
+	fmt.Println("Length of received chunks:", len(nodeData.Received))
 
-	if *counter == expectedChunks {
+	if shared.Counter == expectedChunks {
 		fmt.Printf("Node %s complete received data\n", nodeID)
-		decodedData, err := rs.RSDecode(chunksRecByNode)
+		decodedData, err := rs.RSDecode(shared.ChunksRecByNode)
 		if err != nil {
 			fmt.Printf("Node %s failed to decode data: %v\n", nodeID, err)
 			return
 		}
 		fmt.Printf("Node %s reconstructed data: %s\n", nodeID, decodedData)
 
-		for _, peerInfo := range connectedPeers {
+		for _, peerInfo := range shared.ConnectedPeers {
 			if peerInfo.ID.String() != nodeID {
 				readyKey := fmt.Sprintf("%s-ready", peerInfo.ID.String())
-				if _, ok := sentChunks.Load(readyKey); !ok {
+				if _, ok := shared.SentChunks.Load(readyKey); !ok {
 					SendReady(context.Background(), h, peerInfo, nodeID)
-					sentChunks.Store(readyKey, struct{}{})
+					shared.SentChunks.Store(readyKey, struct{}{})
 				}
 			}
 		}
 	}
 }
 
-func PrintReceivedChunks(nodeID string, receivedChunks *sync.Map, expectedChunks int) {
+func PrintReceivedChunks(nodeID string, expectedChunks int) {
 	fmt.Printf("Node %s printing its received chunks:\n", nodeID)
-	value, ok := receivedChunks.Load(nodeID)
+	value, ok := shared.ReceivedChunks.Load(nodeID)
 	if !ok {
 		fmt.Printf("Node %s has not received any chunks\n", nodeID)
 		return
 	}
 
-	nodeData := value.(*NodeData)
-	if len(nodeData.received) == expectedChunks {
+	nodeData := value.(*shared.NodeData)
+	if len(nodeData.Received) == expectedChunks {
 		var completeData strings.Builder
 
 		for i := 0; i < expectedChunks; i++ {
-			chunk, exists := nodeData.received[i]
+			chunk, exists := nodeData.Received[i]
 			if exists {
 				completeData.WriteString(string(chunk))
 			} else {
