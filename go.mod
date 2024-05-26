@@ -2,7 +2,10 @@ module avid-exp
 
 go 1.22.1
 
-require github.com/libp2p/go-libp2p v0.34.1
+require (
+	github.com/klauspost/reedsolomon v1.12.1
+	github.com/libp2p/go-libp2p v0.34.1
+)
 
 require (
 	github.com/benbjohnson/clock v1.3.5 // indirect

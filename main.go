@@ -19,16 +19,20 @@ import (
 )
 
 const rendezvousString = "libp2p-mdns"
-const chunkSize = 3
+
+// const chunkSize = 3
 
 var (
-    receivedChunks = sync.Map{}
-    sentChunks     = sync.Map{}
-    nodeMutex      = sync.Mutex{}
-    expectedChunks = 3 
-    connectedPeers []peer.AddrInfo
-    node1ID        peer.ID 
-    receivedFrom   = sync.Map{} 
+	receivedChunks  = sync.Map{}
+	sentChunks      = sync.Map{}
+	nodeMutex       = sync.Mutex{}
+	expectedChunks  = 3 // Each node expects to receive 3 chunks (change as needed)
+	connectedPeers  []peer.AddrInfo
+	node1ID         peer.ID      // Variable to store the ID of Node 1
+	receivedFrom    = sync.Map{} // Tracks from which peer each node received chunks
+	counter         = 0
+	chunksRecByNode = make([][]byte, dataShards+parityShards)
+	readyCounter    = 0
 )
 
 func main() {
@@ -72,6 +76,34 @@ func main() {
 	}()
 
 	fmt.Printf("Node %s is listening...\n", *nodeID)
+	// Simple Divide Chunks
+	/*
+
+		// go func() {
+		// 	for pi := range peerChan {
+		// 		if err := h.Connect(ctx, pi); err != nil {
+		// 			fmt.Println("Error connecting to peer:", err)
+		// 			continue
+		// 		}
+
+		// 		fmt.Printf("Node %s connected to %s\n", *nodeID, pi.ID.String())
+		// 		connectedPeers = append(connectedPeers, pi)
+
+		// 		if *nodeID == "Node1" && len(connectedPeers) >= expectedChunks {
+		// 			originalData := "HelloLibP2P"
+		// 			chunks := DivideIntoChunks(originalData, chunkSize)
+		// 			nodeData := NodeData{originalData: originalData, chunks: chunks, received: make(map[int]string)}
+		// 			receivedChunks.Store(*nodeID, &nodeData)
+
+		// 			// Disperse the chunks to all connected peers
+		// 			for i, chunk := range chunks {
+		// 				SendChunk(ctx, h, connectedPeers[i], i, chunk)
+		// 			}
+		// 			break
+		// 		}
+		// 	}
+		// }()
+	*/
 
 	go func() {
 		for pi := range peerChan {
@@ -85,13 +117,21 @@ func main() {
 
 			if *nodeID == "Node1" && len(connectedPeers) >= expectedChunks {
 				originalData := "HelloLibP2P"
-				chunks := DivideIntoChunks(originalData, chunkSize)
-				nodeData := NodeData{originalData: originalData, chunks: chunks, received: make(map[int]string)}
+				shards, err := RSEncode(originalData)
+				if err != nil {
+					fmt.Printf("Failed to encode data: %v\n", err)
+					return
+				}
+				nodeData := NodeData{originalData: originalData, chunks: shards, received: make(map[int][]byte)}
 				receivedChunks.Store(*nodeID, &nodeData)
 
-				// Disperse the chunks to all connected peers
-				for i, chunk := range chunks {
-					SendChunk(ctx, h, connectedPeers[i], i, chunk)
+				// Disperse the encoded shards to all connected peers
+				for i, shard := range shards {
+					if i < len(connectedPeers) {
+						SendChunk(ctx, h, connectedPeers[i], i, string(shard))
+					} else {
+						fmt.Printf("Not enough peers to send shard %d\n", i)
+					}
 				}
 				break
 			}
@@ -105,14 +145,14 @@ func main() {
 				fmt.Printf("Warning: No chunk found for peer %s\n", pi.ID.String())
 				continue
 			}
-	
+
 			nodeData := receivedChunk.(*NodeData)
 			for index, chunk := range nodeData.received {
 				// Construct the key to check the origin of this chunk
 				receivedFromKey := fmt.Sprintf("%s-%d", pi.ID.String(), index)
 				origSender, senderOk := receivedFrom.Load(receivedFromKey)
 				// fmt.Printf("Chunk %d from %s originally from %s\n", index, pi.ID.String(), origSender)
-	
+
 				// Check if the chunk was received directly from Node 1
 				if senderOk && origSender.(string) == node1ID.String() {
 					// fmt.Printf("Propagating chunk %d from %s originally from Node1\n", index, pi.ID.String())
@@ -121,7 +161,7 @@ func main() {
 							chunkKey := fmt.Sprintf("%s-%d", peerInfo.ID.String(), index)
 							if _, ok := sentChunks.Load(chunkKey); !ok {
 								fmt.Printf("Sending chunk %d to %s\n", index, peerInfo.ID.String())
-								SendChunk(ctx, h, peerInfo, index, chunk)
+								SendChunk(ctx, h, peerInfo, index, string(chunk))
 								sentChunks.Store(chunkKey, struct{}{})
 							} else {
 								fmt.Printf("Chunk %d already sent to %s\n", index, peerInfo.ID.String())
@@ -132,10 +172,6 @@ func main() {
 			}
 		}
 	}()
-	
-	
-		
-	
 
 	go func() {
 		reader := bufio.NewReader(os.Stdin)
