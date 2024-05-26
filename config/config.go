@@ -1,4 +1,5 @@
-package shared
+package config
+
 
 import (
 	"sync"
