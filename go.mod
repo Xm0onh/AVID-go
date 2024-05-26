@@ -1,4 +1,4 @@
-module avid-exp
+module github.com/xm0onh/AVID-go
 
 go 1.22.1
 

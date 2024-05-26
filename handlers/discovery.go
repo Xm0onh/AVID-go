@@ -1,4 +1,4 @@
-package network
+package handlers
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	mdns "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 )
 
-func DiscoveryHandler(h host.Host, peerChan chan peer.AddrInfo) {
+func DiscoveryHandler(h host.Host, peerChan chan peer.AddrInfo, rendezvousString string) {
 	mdnsService := mdns.NewMdnsService(h, rendezvousString, &DiscoveryNotifee{peerChan: peerChan})
 	if err := mdnsService.Start(); err != nil {
 		fmt.Println("Error starting mDNS service:", err)

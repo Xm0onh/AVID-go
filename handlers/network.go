@@ -1,4 +1,4 @@
-package network
+package handlers
 
 import (
 	"bufio"
@@ -13,13 +13,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/xm0onh/AVID-go/rs"
 )
-
-// type NodeData struct {
-// 	originalData string
-// 	chunks       []string
-// 	received     map[int]string
-// }
 
 type NodeData struct {
 	originalData string
@@ -27,7 +22,7 @@ type NodeData struct {
 	received     map[int][]byte
 }
 
-func HandleStream(s network.Stream, h host.Host, peerChan chan peer.AddrInfo, wg *sync.WaitGroup, nodeID string) {
+func HandleStream(s network.Stream, h host.Host, peerChan chan peer.AddrInfo, wg *sync.WaitGroup, nodeID string, node1ID *peer.ID, receivedFrom, receivedChunks, sentChunks *sync.Map, nodeMutex *sync.Mutex, counter *int, chunksRecByNode [][]byte, readyCounter *int, connectedPeers []peer.AddrInfo, expectedChunks int) {
 	defer s.Close()
 	defer wg.Done()
 
@@ -36,8 +31,8 @@ func HandleStream(s network.Stream, h host.Host, peerChan chan peer.AddrInfo, wg
 	reader := bufio.NewReader(s)
 
 	nodeMutex.Lock()
-	if node1ID == "" {
-		node1ID = s.Conn().RemotePeer()
+	if *node1ID == "" {
+		*node1ID = s.Conn().RemotePeer()
 		fmt.Printf("Node %s set Node1ID to %s\n", nodeID, node1ID.String())
 	}
 	nodeMutex.Unlock()
@@ -67,25 +62,24 @@ func HandleStream(s network.Stream, h host.Host, peerChan chan peer.AddrInfo, wg
 			return
 		}
 
-		receivedData := (buf)
+		receivedData := buf
 		fmt.Printf("Received data: %s\n", receivedData)
 
-		// Store the origin of the received chunk
 		receivedFromKey := fmt.Sprintf("%s-%d", s.Conn().RemotePeer().String(), chunkIndex)
 		fmt.Printf("Storing origin %s for chunk %d\n", s.Conn().RemotePeer().String(), chunkIndex)
 		receivedFrom.Store(receivedFromKey, s.Conn().RemotePeer().String())
 
-		StoreReceivedChunk(s.Conn().RemotePeer().String(), int(chunkIndex), receivedData, h, peerChan)
+		StoreReceivedChunk(s.Conn().RemotePeer().String(), int(chunkIndex), receivedData, h, peerChan, nodeMutex, counter, chunksRecByNode, connectedPeers, sentChunks, receivedChunks, expectedChunks)
 
 		peerChan <- peer.AddrInfo{ID: s.Conn().RemotePeer()}
 	}
 }
 
-func HandleReadyStream(s network.Stream, h host.Host, wg *sync.WaitGroup) {
+func HandleReadyStream(s network.Stream, h host.Host, wg *sync.WaitGroup, readyCounter *int, connectedPeers []peer.AddrInfo, expectedChunks int) {
 	defer s.Close()
 	defer wg.Done()
 
-	readyCounter++
+	(*readyCounter)++
 	reader := bufio.NewReader(s)
 	buf, err := reader.ReadString('\n')
 	if err != nil {
@@ -96,13 +90,12 @@ func HandleReadyStream(s network.Stream, h host.Host, wg *sync.WaitGroup) {
 
 	peerID := strings.TrimSpace(buf)
 	fmt.Printf("Ready message received for peer %s\n", peerID)
-	if readyCounter == expectedChunks {
+	if *readyCounter == expectedChunks {
 		fmt.Println("All nodes are ready")
 	}
-
 }
 
-func SendChunk(ctx context.Context, h host.Host, pi peer.AddrInfo, chunkIndex int, chunk string) {
+func SendChunk(ctx context.Context, h host.Host, pi peer.AddrInfo, chunkIndex int, chunk []byte) {
 	s, err := h.NewStream(ctx, pi.ID, protocol.ID("/chunk"))
 	if err != nil {
 		fmt.Println("Error creating stream:", err)
@@ -116,7 +109,7 @@ func SendChunk(ctx context.Context, h host.Host, pi peer.AddrInfo, chunkIndex in
 		return
 	}
 
-	if _, err := s.Write([]byte(chunk)); err != nil {
+	if _, err := s.Write(chunk); err != nil {
 		fmt.Println("Error writing to stream:", err)
 		s.Reset()
 		return
@@ -154,10 +147,11 @@ func SendReady(ctx context.Context, h host.Host, pi peer.AddrInfo, peerID string
 	fmt.Printf("Sent ready message to %s for peer %s\n", pi.ID.String(), peerID)
 }
 
-func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host, peerChan chan peer.AddrInfo) {
+func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host, peerChan chan peer.AddrInfo, nodeMutex *sync.Mutex, counter *int, chunksRecByNode [][]byte, connectedPeers []peer.AddrInfo, sentChunks *sync.Map, receivedChunks *sync.Map, expectedChunks int) {
+	nodeMutex.Lock()
+	defer nodeMutex.Unlock()
 
-	counter++
-	// Ensure the nodeID of the current node is stored in receivedChunks
+	(*counter)++
 	data, ok := receivedChunks.Load(nodeID)
 	if !ok {
 		fmt.Println("NodeID not found in receivedChunks", nodeID)
@@ -166,9 +160,8 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 	}
 	nodeData := data.(*NodeData)
 	chunksRecByNode[chunkIndex] = chunk
-	fmt.Println("coutner", counter)
+	fmt.Println("counter", *counter)
 	fmt.Println("chunksRecByNode", chunksRecByNode)
-	// Avoid processing the same chunk multiple times
 	if existingChunk, exists := nodeData.received[chunkIndex]; exists && bytes.Equal(existingChunk, chunk) {
 		fmt.Printf("Node %s already has chunk %d: %s\n", nodeID, chunkIndex, chunk)
 		return
@@ -179,18 +172,15 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 	fmt.Printf("Node %s received chunk %d: %s\n", nodeID, chunkIndex, chunk)
 	fmt.Println("Length of received chunks:", len(nodeData.received))
 
-	if counter == expectedChunks {
+	if *counter == expectedChunks {
 		fmt.Printf("Node %s complete received data\n", nodeID)
-		decodedData, err := RSDecode(chunksRecByNode)
-		
+		decodedData, err := rs.RSDecode(chunksRecByNode)
 		if err != nil {
 			fmt.Printf("Node %s failed to decode data: %v\n", nodeID, err)
 			return
 		}
 		fmt.Printf("Node %s reconstructed data: %s\n", nodeID, decodedData)
 
-
-		// Broadcast ready message
 		for _, peerInfo := range connectedPeers {
 			if peerInfo.ID.String() != nodeID {
 				readyKey := fmt.Sprintf("%s-ready", peerInfo.ID.String())
@@ -202,7 +192,8 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 		}
 	}
 }
-func PrintReceivedChunks(nodeID string) {
+
+func PrintReceivedChunks(nodeID string, receivedChunks *sync.Map, expectedChunks int) {
 	fmt.Printf("Node %s printing its received chunks:\n", nodeID)
 	value, ok := receivedChunks.Load(nodeID)
 	if !ok {
@@ -214,7 +205,6 @@ func PrintReceivedChunks(nodeID string) {
 	if len(nodeData.received) == expectedChunks {
 		var completeData strings.Builder
 
-		// Collect the chunks in the correct order
 		for i := 0; i < expectedChunks; i++ {
 			chunk, exists := nodeData.received[i]
 			if exists {
@@ -225,7 +215,6 @@ func PrintReceivedChunks(nodeID string) {
 			}
 		}
 
-		// Print the complete data
 		fmt.Printf("Node %s reconstructed data: %s\n", nodeID, completeData.String())
 	} else {
 		fmt.Printf("Node %s has incomplete data\n", nodeID)

@@ -16,25 +16,35 @@ import (
 	crypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/xm0onh/avid-go/network"
+	"github.com/xm0onh/AVID-go/handlers"
+	"github.com/xm0onh/AVID-go/rs"
 )
 
-const rendezvousString = "libp2p-mdns"
-
-// const chunkSize = 3
+const (
+	rendezvousString = "libp2p-mdns"
+	chunkSize        = 3
+	dataShards       = 2
+	parityShards     = 1
+	expectedChunks   = dataShards + parityShards
+)
 
 var (
 	receivedChunks  = sync.Map{}
 	sentChunks      = sync.Map{}
 	nodeMutex       = sync.Mutex{}
-	expectedChunks  = 3 // Each node expects to receive 3 chunks (change as needed)
 	connectedPeers  []peer.AddrInfo
-	node1ID         peer.ID      // Variable to store the ID of Node 1
-	receivedFrom    = sync.Map{} // Tracks from which peer each node received chunks
+	node1ID         peer.ID // Variable to store the ID of Node 1
+	receivedFrom    = sync.Map{}
 	counter         = 0
-	chunksRecByNode = make([][]byte, dataShards+parityShards)
+	chunksRecByNode = make([][]byte, chunkSize)
 	readyCounter    = 0
 )
+
+type NodeData struct {
+	originalData string
+	chunks       [][]byte
+	received     map[int][]byte
+}
 
 func main() {
 	nodeID := flag.String("node", "", "Node ID")
@@ -55,15 +65,15 @@ func main() {
 
 	h.SetStreamHandler("/chunk", func(s network.Stream) {
 		wg.Add(1)
-		go HandleStream(s, h, peerDataChan, &wg, *nodeID)
+		go handlers.HandleStream(s, h, peerDataChan, &wg, *nodeID, &node1ID, &receivedFrom, &receivedChunks, &sentChunks, &nodeMutex, &counter, chunksRecByNode, &readyCounter, connectedPeers, expectedChunks)
 	})
 
 	h.SetStreamHandler("/ready", func(s network.Stream) {
 		wg.Add(1)
-		go HandleReadyStream(s, h, &wg)
+		go handlers.HandleReadyStream(s, h, &wg, &readyCounter, connectedPeers, expectedChunks)
 	})
 
-	go DiscoveryHandler(h, peerChan)
+	go handlers.DiscoveryHandler(h, peerChan, rendezvousString)
 
 	go func() {
 		c := make(chan os.Signal, 1)
@@ -77,34 +87,6 @@ func main() {
 	}()
 
 	fmt.Printf("Node %s is listening...\n", *nodeID)
-	// Simple Divide Chunks
-	/*
-
-		// go func() {
-		// 	for pi := range peerChan {
-		// 		if err := h.Connect(ctx, pi); err != nil {
-		// 			fmt.Println("Error connecting to peer:", err)
-		// 			continue
-		// 		}
-
-		// 		fmt.Printf("Node %s connected to %s\n", *nodeID, pi.ID.String())
-		// 		connectedPeers = append(connectedPeers, pi)
-
-		// 		if *nodeID == "Node1" && len(connectedPeers) >= expectedChunks {
-		// 			originalData := "HelloLibP2P"
-		// 			chunks := DivideIntoChunks(originalData, chunkSize)
-		// 			nodeData := NodeData{originalData: originalData, chunks: chunks, received: make(map[int]string)}
-		// 			receivedChunks.Store(*nodeID, &nodeData)
-
-		// 			// Disperse the chunks to all connected peers
-		// 			for i, chunk := range chunks {
-		// 				SendChunk(ctx, h, connectedPeers[i], i, chunk)
-		// 			}
-		// 			break
-		// 		}
-		// 	}
-		// }()
-	*/
 
 	go func() {
 		for pi := range peerChan {
@@ -118,21 +100,17 @@ func main() {
 
 			if *nodeID == "Node1" && len(connectedPeers) >= expectedChunks {
 				originalData := "HelloLibP2P"
-				shards, err := RSEncode(originalData)
+				shards, err := rs.RSEncode(originalData)
 				if err != nil {
-					fmt.Printf("Failed to encode data: %v\n", err)
+					fmt.Printf("Node %s failed to encode data: %v\n", *nodeID, err)
 					return
 				}
 				nodeData := NodeData{originalData: originalData, chunks: shards, received: make(map[int][]byte)}
 				receivedChunks.Store(*nodeID, &nodeData)
 
 				// Disperse the encoded shards to all connected peers
-				for i, shard := range shards {
-					if i < len(connectedPeers) {
-						SendChunk(ctx, h, connectedPeers[i], i, string(shard))
-					} else {
-						fmt.Printf("Not enough peers to send shard %d\n", i)
-					}
+				for i, shard := range shards[:expectedChunks] {
+					handlers.SendChunk(ctx, h, connectedPeers[i], i, shard)
 				}
 				break
 			}
@@ -142,6 +120,7 @@ func main() {
 	go func() {
 		for pi := range peerDataChan {
 			receivedChunk, ok := receivedChunks.Load(pi.ID.String())
+			fmt.Println("Received chunk from", pi.ID.String())
 			if !ok {
 				fmt.Printf("Warning: No chunk found for peer %s\n", pi.ID.String())
 				continue
@@ -149,20 +128,16 @@ func main() {
 
 			nodeData := receivedChunk.(*NodeData)
 			for index, chunk := range nodeData.received {
-				// Construct the key to check the origin of this chunk
 				receivedFromKey := fmt.Sprintf("%s-%d", pi.ID.String(), index)
 				origSender, senderOk := receivedFrom.Load(receivedFromKey)
-				// fmt.Printf("Chunk %d from %s originally from %s\n", index, pi.ID.String(), origSender)
 
-				// Check if the chunk was received directly from Node 1
 				if senderOk && origSender.(string) == node1ID.String() {
-					// fmt.Printf("Propagating chunk %d from %s originally from Node1\n", index, pi.ID.String())
 					for _, peerInfo := range connectedPeers {
 						if peerInfo.ID != pi.ID && peerInfo.ID.String() != *nodeID && peerInfo.ID != node1ID {
 							chunkKey := fmt.Sprintf("%s-%d", peerInfo.ID.String(), index)
 							if _, ok := sentChunks.Load(chunkKey); !ok {
 								fmt.Printf("Sending chunk %d to %s\n", index, peerInfo.ID.String())
-								SendChunk(ctx, h, peerInfo, index, string(chunk))
+								handlers.SendChunk(context.Background(), h, peerInfo, index, chunk)
 								sentChunks.Store(chunkKey, struct{}{})
 							} else {
 								fmt.Printf("Chunk %d already sent to %s\n", index, peerInfo.ID.String())
@@ -178,8 +153,8 @@ func main() {
 		reader := bufio.NewReader(os.Stdin)
 		for {
 			text, _ := reader.ReadString('\n')
-			if strings.TrimSpace(text) != "show" {
-				PrintReceivedChunks(*nodeID)
+			if strings.TrimSpace(text) == "show" {
+				handlers.PrintReceivedChunks(*nodeID, &receivedChunks, expectedChunks)
 			}
 		}
 	}()
