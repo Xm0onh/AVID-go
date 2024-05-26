@@ -1,11 +1,12 @@
 # LT-AVID
 Asynchronous verifiable information dispersal with libp2p in golang
 
+Manual running:
 ```go
 go run . -node=Node<ID>
 ```
 
-Run the nodes:
+Automatic running:
 ```bash
 ./StartNodes.sh
 ```
