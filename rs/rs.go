@@ -1,14 +1,15 @@
-
 package rs
+
 import (
 	"bytes"
 	"fmt"
 
 	"github.com/klauspost/reedsolomon"
 )
+
 // RS parameters
-const dataShards = 3
-const parityShards = 2
+const dataShards = 2
+const parityShards = 1
 
 func RSEncode(data string) ([][]byte, error) {
 	enc, err := reedsolomon.New(dataShards, parityShards)

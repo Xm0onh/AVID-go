@@ -17,10 +17,10 @@ var (
 	SentChunks      = sync.Map{}
 	NodeMutex       = sync.Mutex{}
 	ConnectedPeers  []peer.AddrInfo
-	Node1ID         peer.ID // Variable to store the ID of Node 1
+	Node1ID         peer.ID 
 	ReceivedFrom    = sync.Map{}
 	Counter         = 0
 	ChunksRecByNode = make([][]byte, 3)
 	ReadyCounter    = 0
-	expectedChunks  = 3
+	ExpectedChunks  = 3
 )

@@ -47,12 +47,12 @@ func main() {
 
 	h.SetStreamHandler("/chunk", func(s network.Stream) {
 		wg.Add(1)
-		go handlers.HandleStream(s, h, peerDataChan, &wg, *nodeID, shared.expectedChunks)
+		go handlers.HandleStream(s, h, peerDataChan, &wg, *nodeID)
 	})
 
 	h.SetStreamHandler("/ready", func(s network.Stream) {
 		wg.Add(1)
-		go handlers.HandleReadyStream(s, h, &wg, shared.expectedChunks)
+		go handlers.HandleReadyStream(s, h, &wg)
 	})
 
 	go handlers.DiscoveryHandler(h, peerChan, rendezvousString)
@@ -80,7 +80,7 @@ func main() {
 			fmt.Printf("Node %s connected to %s\n", *nodeID, pi.ID.String())
 			shared.ConnectedPeers = append(shared.ConnectedPeers, pi)
 
-			if *nodeID == "Node1" && len(shared.ConnectedPeers) >= expectedChunks {
+			if *nodeID == "Node1" && len(shared.ConnectedPeers) >= shared.ExpectedChunks {
 				originalData := "HelloLibP2P"
 				shards, err := rs.RSEncode(originalData)
 				if err != nil {
@@ -90,7 +90,7 @@ func main() {
 				nodeData := shared.NodeData{OriginalData: originalData, Chunks: shards, Received: make(map[int][]byte)}
 				shared.ReceivedChunks.Store(*nodeID, &nodeData)
 
-				for i, shard := range shards[:expectedChunks] {
+				for i, shard := range shards[:shared.ExpectedChunks] {
 					handlers.SendChunk(ctx, h, shared.ConnectedPeers[i], i, shard)
 				}
 				break
@@ -135,7 +135,7 @@ func main() {
 		for {
 			text, _ := reader.ReadString('\n')
 			if strings.TrimSpace(text) == "show" {
-				handlers.PrintReceivedChunks(*nodeID, expectedChunks)
+				handlers.PrintReceivedChunks(*nodeID)
 			}
 		}
 	}()

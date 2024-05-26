@@ -5,6 +5,7 @@ go 1.22.1
 require (
 	github.com/klauspost/reedsolomon v1.12.1
 	github.com/libp2p/go-libp2p v0.34.1
+	github.com/stretchr/testify v1.9.0
 )
 
 require (
@@ -91,7 +92,6 @@ require (
 	github.com/quic-go/webtransport-go v0.8.0 // indirect
 	github.com/raulk/go-watchdog v1.3.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
-	github.com/stretchr/testify v1.9.0 // indirect
 	go.uber.org/dig v1.17.1 // indirect
 	go.uber.org/fx v1.21.1 // indirect
 	go.uber.org/mock v0.4.0 // indirect

@@ -17,7 +17,7 @@ import (
 	"github.com/xm0onh/AVID-go/shared"
 )
 
-func HandleStream(s network.Stream, h host.Host, peerChan chan peer.AddrInfo, wg *sync.WaitGroup, nodeID string, expectedChunks int) {
+func HandleStream(s network.Stream, h host.Host, peerChan chan peer.AddrInfo, wg *sync.WaitGroup, nodeID string) {
 	defer s.Close()
 	defer wg.Done()
 
@@ -64,13 +64,13 @@ func HandleStream(s network.Stream, h host.Host, peerChan chan peer.AddrInfo, wg
 		fmt.Printf("Storing origin %s for chunk %d\n", s.Conn().RemotePeer().String(), chunkIndex)
 		shared.ReceivedFrom.Store(receivedFromKey, s.Conn().RemotePeer().String())
 
-		StoreReceivedChunk(s.Conn().RemotePeer().String(), int(chunkIndex), receivedData, h, peerChan, expectedChunks)
+		StoreReceivedChunk(s.Conn().RemotePeer().String(), int(chunkIndex), receivedData, h, peerChan)
 
 		peerChan <- peer.AddrInfo{ID: s.Conn().RemotePeer()}
 	}
 }
 
-func HandleReadyStream(s network.Stream, h host.Host, wg *sync.WaitGroup, expectedChunks int) {
+func HandleReadyStream(s network.Stream, h host.Host, wg *sync.WaitGroup) {
 	defer s.Close()
 	defer wg.Done()
 
@@ -85,7 +85,7 @@ func HandleReadyStream(s network.Stream, h host.Host, wg *sync.WaitGroup, expect
 
 	peerID := strings.TrimSpace(buf)
 	fmt.Printf("Ready message received for peer %s\n", peerID)
-	if shared.ReadyCounter == expectedChunks {
+	if shared.ReadyCounter == shared.ExpectedChunks {
 		fmt.Println("All nodes are ready")
 	}
 }
@@ -142,7 +142,7 @@ func SendReady(ctx context.Context, h host.Host, pi peer.AddrInfo, peerID string
 	fmt.Printf("Sent ready message to %s for peer %s\n", pi.ID.String(), peerID)
 }
 
-func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host, peerChan chan peer.AddrInfo, expectedChunks int) {
+func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host, peerChan chan peer.AddrInfo) {
 	shared.NodeMutex.Lock()
 	defer shared.NodeMutex.Unlock()
 
@@ -167,7 +167,8 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 	fmt.Printf("Node %s received chunk %d: %s\n", nodeID, chunkIndex, chunk)
 	fmt.Println("Length of received chunks:", len(nodeData.Received))
 
-	if shared.Counter == expectedChunks {
+	if shared.Counter == shared.ExpectedChunks {
+		fmt.Println("Counter", shared.Counter)
 		fmt.Printf("Node %s complete received data\n", nodeID)
 		decodedData, err := rs.RSDecode(shared.ChunksRecByNode)
 		if err != nil {
@@ -188,7 +189,7 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 	}
 }
 
-func PrintReceivedChunks(nodeID string, expectedChunks int) {
+func PrintReceivedChunks(nodeID string) {
 	fmt.Printf("Node %s printing its received chunks:\n", nodeID)
 	value, ok := shared.ReceivedChunks.Load(nodeID)
 	if !ok {
@@ -197,10 +198,10 @@ func PrintReceivedChunks(nodeID string, expectedChunks int) {
 	}
 
 	nodeData := value.(*shared.NodeData)
-	if len(nodeData.Received) == expectedChunks {
+	if len(nodeData.Received) == shared.ExpectedChunks {
 		var completeData strings.Builder
 
-		for i := 0; i < expectedChunks; i++ {
+		for i := 0; i < shared.ExpectedChunks; i++ {
 			chunk, exists := nodeData.Received[i]
 			if exists {
 				completeData.WriteString(string(chunk))
