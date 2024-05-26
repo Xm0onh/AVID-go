@@ -4,10 +4,10 @@ rm -f DispersalNode.txt
 rm -f bootstrap_addrs.txt
 
 # Number of regular nodes to start
-NUM_NODES=5
+NUM_NODES=18
 PORT_BASE=4007
 BOOTSTRAP_PORT_BASE=4001
-BOOTSTRAP_NODES=2
+BOOTSTRAP_NODES=3
 BOOTSTRAP_READY_TIMEOUT=30
 IP_BASE="127.0.0."
 
