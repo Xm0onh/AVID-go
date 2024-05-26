@@ -77,6 +77,41 @@ func main() {
 
 	fmt.Printf("Node %s is listening on %s:%d with Peer ID %s...\n", *nodeID, *ip, *port, h.ID())
 
+	// Write Node1's Peer ID as dispersal node to a file
+	if *nodeID == "Node1" {
+		file, err := os.Create("DispersalNode.txt")
+		if err != nil {
+			fmt.Printf("Error creating file: %v\n", err)
+			os.Exit(1)
+		}
+		defer file.Close()
+		_, err = file.WriteString(h.ID().String())
+		if err != nil {
+			fmt.Printf("Error writing to file: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	// Read Node1's Peer ID from the file
+	if *nodeID != "Node1" {
+		file, err := os.Open("DispersalNode.txt")
+		if err != nil {
+			fmt.Printf("Error opening file: %v\n", err)
+			os.Exit(1)
+		}
+		defer file.Close()
+		scanner := bufio.NewScanner(file)
+		if scanner.Scan() {
+			node1PeerID, err := peer.Decode(scanner.Text())
+			if err != nil {
+				fmt.Printf("Error decoding peer ID: %v\n", err)
+				os.Exit(1)
+			}
+			config.Node1ID = node1PeerID
+		}
+	}
+
+
 	var wg sync.WaitGroup
 	peerChan := make(chan peer.AddrInfo)
 	peerDataChan := make(chan peer.AddrInfo)
@@ -201,6 +236,7 @@ func main() {
 				wg.Wait()
 				os.Exit(0)
 			} else if strings.TrimSpace(text) == "con" {
+				fmt.Println("Number of Connected Peers:", len(config.ConnectedPeers))
 				fmt.Println("Connected Peers:", config.ConnectedPeers)
 			}
 		}
