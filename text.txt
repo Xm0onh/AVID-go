@@ -1,0 +1,12 @@
+
+Node Node1 is listening...
+Node Node1 connected to 12D3KooWGfS52kp72eAssc7MazsvX5rbMm1b4aoLDmZvvYEiekje
+Node Node1 connected to 12D3KooWLJwcQmPs5j4osFTVQRNtZsR765LLRE7mYTL6z1Ana6yR
+Node Node1 connected to 12D3KooWEvxf3jDSPdVJpoSVHVAseacNQJSLRy18ft84g2wutBpK
+Sent chunk to 12D3KooWGfS52kp72eAssc7MazsvX5rbMm1b4aoLDmZvvYEiekje: Hel
+Sent chunk to 12D3KooWLJwcQmPs5j4osFTVQRNtZsR765LLRE7mYTL6z1Ana6yR: loL
+Sent chunk to 12D3KooWEvxf3jDSPdVJpoSVHVAseacNQJSLRy18ft84g2wutBpK: ibP2P
+Received ready message from: 12D3KooWLJwcQmPs5j4osFTVQRNtZsR765LLRE7mYTL6z1Ana6yR
+Ready message received for peer 12D3KooWEvxf3jDSPdVJpoSVHVAseacNQJSLRy18ft84g2wutBpK
+Received ready message from: 12D3KooWGfS52kp72eAssc7MazsvX5rbMm1b4aoLDmZvvYEiekje
+Ready message received for peer 12D3KooWEvxf3jDSPdVJpoSVHVAseacNQJSLRy18ft84g2wutBpK

@@ -13,7 +13,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 )
-
+var counter = 0
+var chunksRecByNode = make([]string, 3)
+var readyCounter = 0
 type NodeData struct {
 	originalData string
 	chunks       []string
@@ -82,8 +84,7 @@ func HandleReadyStream(s network.Stream, h host.Host, wg *sync.WaitGroup) {
 	defer s.Close()
 	defer wg.Done()
 
-	fmt.Println("Received ready message from:", s.Conn().RemotePeer())
-
+	readyCounter++
 	reader := bufio.NewReader(s)
 	buf, err := reader.ReadString('\n')
 	if err != nil {
@@ -94,6 +95,9 @@ func HandleReadyStream(s network.Stream, h host.Host, wg *sync.WaitGroup) {
 
 	peerID := strings.TrimSpace(buf)
 	fmt.Printf("Ready message received for peer %s\n", peerID)
+	if readyCounter == expectedChunks {
+		fmt.Println("All nodes are ready")
+	}
 
 }
 
@@ -150,9 +154,8 @@ func SendReady(ctx context.Context, h host.Host, pi peer.AddrInfo, peerID string
 }
 
 func StoreReceivedChunk(nodeID string, chunkIndex int, chunk string, h host.Host, peerChan chan peer.AddrInfo) {
-    nodeMutex.Lock()
-    defer nodeMutex.Unlock()
 
+	counter++
     // Ensure the nodeID of the current node is stored in receivedChunks
     data, ok := receivedChunks.Load(nodeID)
     if !ok {
@@ -161,7 +164,9 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk string, h host.Host
         receivedChunks.Store(nodeID, data)
     }
     nodeData := data.(*NodeData)
-
+	chunksRecByNode[chunkIndex] = chunk
+	fmt.Println("coutner", counter)
+	fmt.Println("chunksRecByNode", chunksRecByNode)
     // Avoid processing the same chunk multiple times
     if existingChunk, exists := nodeData.received[chunkIndex]; exists && existingChunk == chunk {
         fmt.Printf("Node %s already has chunk %d: %s\n", nodeID, chunkIndex, chunk)
@@ -173,22 +178,8 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk string, h host.Host
     fmt.Printf("Node %s received chunk %d: %s\n", nodeID, chunkIndex, chunk)
     fmt.Println("Length of received chunks:", len(nodeData.received))
 
-    if len(nodeData.received) == expectedChunks {
-        var completeData strings.Builder
-
-        // Collect the chunks in the correct order
-        for i := 0; i < expectedChunks; i++ {
-            chunk, exists := nodeData.received[i]
-            if exists {
-                completeData.WriteString(chunk)
-            } else {
-                fmt.Printf("Node %s is missing chunk %d\n", nodeID, i)
-                return
-            }
-        }
-
-        // Print the complete data
-        fmt.Printf("Node %s complete received data: %s\n", nodeID, completeData.String())
+    if counter == expectedChunks {
+        fmt.Printf("Node %s complete received data\n", nodeID)
 
         // Broadcast ready message
         for _, peerInfo := range connectedPeers {
@@ -202,12 +193,6 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk string, h host.Host
         }
     }
 }
-
-
-
-
-
-
 
 
 func PrintReceivedChunks(nodeID string) {

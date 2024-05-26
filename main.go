@@ -25,10 +25,10 @@ var (
     receivedChunks = sync.Map{}
     sentChunks     = sync.Map{}
     nodeMutex      = sync.Mutex{}
-    expectedChunks = 3 // Each node expects to receive 3 chunks (change as needed)
+    expectedChunks = 3 
     connectedPeers []peer.AddrInfo
-    node1ID        peer.ID // Variable to store the ID of Node 1
-    receivedFrom   = sync.Map{} // Tracks from which peer each node received chunks
+    node1ID        peer.ID 
+    receivedFrom   = sync.Map{} 
 )
 
 func main() {
