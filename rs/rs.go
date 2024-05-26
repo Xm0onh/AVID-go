@@ -5,11 +5,12 @@ import (
 	"fmt"
 
 	"github.com/klauspost/reedsolomon"
+	"github.com/xm0onh/AVID-go/config"
 )
 
 // RS parameters
-const dataShards = 2
-const parityShards = 1
+const dataShards = config.DataShards
+const parityShards = config.ParityShards
 
 func RSEncode(data string) ([][]byte, error) {
 	enc, err := reedsolomon.New(dataShards, parityShards)

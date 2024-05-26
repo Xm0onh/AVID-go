@@ -1,9 +1,9 @@
 package config
 
-
 import (
 	"sync"
-	 "time"
+	"time"
+
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
@@ -13,21 +13,22 @@ type NodeData struct {
 	Received     map[int][]byte
 }
 
+const (
+	DataShards     = 14
+	ParityShards   = 6
+	ExpectedChunks = 14
+)
+
 var (
+	Nodes           = 20
 	ReceivedChunks  = sync.Map{}
 	SentChunks      = sync.Map{}
 	NodeMutex       = sync.Mutex{}
 	ConnectedPeers  []peer.AddrInfo
-	Node1ID         peer.ID 
+	Node1ID         peer.ID
 	ReceivedFrom    = sync.Map{}
 	Counter         = 0
-	ChunksRecByNode = make([][]byte, 3)
+	ChunksRecByNode = make([][]byte, DataShards+ParityShards)
 	ReadyCounter    = 0
-	ExpectedChunks  = 3
-)
-
-
-
-var (
-	StartTime = time.Now()
+	StartTime       time.Time
 )
