@@ -3,7 +3,7 @@ package config
 
 import (
 	"sync"
-
+	 "time"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
@@ -24,4 +24,10 @@ var (
 	ChunksRecByNode = make([][]byte, 3)
 	ReadyCounter    = 0
 	ExpectedChunks  = 3
+)
+
+
+
+var (
+	StartTime = time.Now()
 )

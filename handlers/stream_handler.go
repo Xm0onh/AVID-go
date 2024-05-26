@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-
+	"time"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -87,6 +87,7 @@ func HandleReadyStream(s network.Stream, h host.Host, wg *sync.WaitGroup) {
 	fmt.Printf("Ready message received for peer %s\n", peerID)
 	if config.ReadyCounter == config.ExpectedChunks {
 		fmt.Println("All nodes are ready")
+		fmt.Println("Total time", time.Since(config.StartTime).Milliseconds(), "ms")
 	}
 }
 
