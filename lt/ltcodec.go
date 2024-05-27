@@ -19,10 +19,10 @@ func LTEncode(data string) ([][]byte, error) {
 		encodedBlockIDs[i] = int64(i)
 	}
 
-	encodedBlocks := EncodeLTBlocks([]byte(data), encodedBlockIDs, codec)
+	droplets := EncodeLTBlocks([]byte(data), encodedBlockIDs, codec)
 
-	chunks := make([][]byte, len(encodedBlocks))
-	for i, block := range encodedBlocks {
+	chunks := make([][]byte, len(droplets))
+	for i, block := range droplets {
 		chunks[i] = block.Data
 	}
 

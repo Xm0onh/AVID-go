@@ -12,9 +12,11 @@ mkdir output
 NUM_NODES=6
 PORT_BASE=4007
 BOOTSTRAP_PORT_BASE=4001
-BOOTSTRAP_NODES=3
+BOOTSTRAP_NODES=1
 BOOTSTRAP_READY_TIMEOUT=30
 IP_BASE="127.0.0."
+CODING_METHOD="LT"
+
 
 # Function to set up IP aliases
 setup_ip_aliases() {
@@ -49,7 +51,7 @@ for i in $(seq 1 $BOOTSTRAP_NODES)
 do
     ip_suffix=$((i + 1))
     ip="${IP_BASE}${ip_suffix}"
-    osascript -e "tell application \"Terminal\" to do script \"cd '$(pwd)' && go run ./cmd/main.go -node=BootstrapNode$i -port=$((BOOTSTRAP_PORT_BASE + i - 1)) -bootstrap=true -ip=$ip\""
+    osascript -e "tell application \"Terminal\" to do script \"cd '$(pwd)' && go run ./cmd/main.go -node=BootstrapNode$i -port=$((BOOTSTRAP_PORT_BASE + i - 1)) -bootstrap=true -ip=$ip -coding=$CODING_METHOD\""
 done
 
 # Wait for all bootstrap nodes to be ready
@@ -70,10 +72,10 @@ echo "All bootstrap nodes are ready. Starting regular nodes in 10 seconds..."
 sleep 10
 
 echo "Node 1 can be started manually with the following command:"
-echo "cd $(pwd) && go run ./cmd/main.go -node=Node1 -port=4006 -ip=${IP_BASE}7"
+echo "cd $(pwd) && go run ./cmd/main.go -node=Node1 -port=4006 -ip=${IP_BASE}7 -coding=$CODING_METHOD"
 
 # Start Node 1 automatically
-osascript -e "tell application \"Terminal\" to do script \"cd '$(pwd)' && go run ./cmd/main.go -node=Node1 -port=4006 -ip=${IP_BASE}7\""
+osascript -e "tell application \"Terminal\" to do script \"cd '$(pwd)' && go run ./cmd/main.go -node=Node1 -port=4006 -ip=${IP_BASE}7 -coding=$CODING_METHOD\""
 sleep 5
 
 # Start the rest of the regular nodes
@@ -81,9 +83,9 @@ for i in $(seq 2 $((NUM_NODES + 1)))
 do
     ip_suffix=$((i + 6))
     ip="${IP_BASE}${ip_suffix}"
-    osascript -e "tell application \"Terminal\" to do script \"cd '$(pwd)' && go run ./cmd/main.go -node=Node$i -port=$((PORT_BASE + i - 2)) -ip=$ip\""
-    sleep 10
-    echo "Node$i started on port $((PORT_BASE + i - 2)) with IP $ip"
+    osascript -e "tell application \"Terminal\" to do script \"cd '$(pwd)' && go run ./cmd/main.go -node=Node$i -port=$((PORT_BASE + i - 2)) -ip=$ip -coding=$CODING_METHOD\""
+    sleep 2
+    echo "Node$i started on port $((PORT_BASE + i - 2)) with IP $ip -coding=$CODING_METHOD"
 done
 
 echo "$NUM_NODES nodes started in separate terminal windows, excluding Node 1 which should be started manually."

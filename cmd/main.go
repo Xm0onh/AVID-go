@@ -25,6 +25,7 @@ import (
 	BT "github.com/xm0onh/AVID-go/bootstrap"
 	"github.com/xm0onh/AVID-go/config"
 	"github.com/xm0onh/AVID-go/handlers"
+	lt "github.com/xm0onh/AVID-go/lt"
 	"github.com/xm0onh/AVID-go/rs"
 )
 
@@ -43,9 +44,18 @@ func main() {
 	bootstrap := flag.Bool("bootstrap", false, "Start as bootstrap node")
 	port := flag.Int("port", 0, "Port to listen on")
 	ip := flag.String("ip", "127.0.0.1", "IP address to listen on")
+	codingMethod := flag.String("coding", "RS", "Coding method (RS, LT)")
 
 	flag.Parse()
 
+	if *codingMethod == "LT" {
+		config.CodingMethod = "LT"
+	} else if *codingMethod == "RS"{
+		config.CodingMethod = "RS"
+	} else {
+		fmt.Println("Invalid coding method. Please specify either 'RS' or 'LT'.")
+		os.Exit(1)
+	}
 	if *nodeID == "" {
 		fmt.Println("Please specify node ID with -node flag.")
 		os.Exit(1)
@@ -167,7 +177,7 @@ func main() {
 			fmt.Printf("Node %s connected to peer %s at %v\n", *nodeID, pi.ID.String(), pi.Addrs)
 			config.ConnectedPeers = append(config.ConnectedPeers, pi)
 
-			if *nodeID == "Node1" && len(config.ConnectedPeers) >= config.Nodes-1 {
+			if *nodeID == "Node1" && len(config.ConnectedPeers) > config.Nodes-1 {
 				fmt.Println("Node 1 is ready to broadcast chunks. Type 'start' to begin broadcasting.")
 				<-broadcastSignal
 				config.StartTime = time.Now()
@@ -180,18 +190,40 @@ func main() {
 					return
 				}
 
-				shards, err := rs.RSEncode(string(originalData))
-				fmt.Println("Length of shards:", len(shards))
-				fmt.Println("Number of Connected Peers:", len(config.ConnectedPeers))
-				if err != nil {
-					fmt.Printf("Node %s failed to encode data: %v\n", *nodeID, err)
-					return
-				}
-				nodeData := config.NodeData{OriginalData: string(originalData), Chunks: shards, Received: make(map[int][]byte)}
-				config.ReceivedChunks.Store(*nodeID, &nodeData)
+				var chunks [][]byte
+				var originalLength int
 
-				for i, shard := range shards[:config.Nodes-1] {
-					handlers.SendChunk(ctx, h, config.ConnectedPeers[i], i, shard)
+				if *codingMethod == "RS" {
+					chunks, err = rs.RSEncode(string(originalData))
+					if err != nil {
+						fmt.Printf("Node %s failed to encode data: %v\n", *nodeID, err)
+						return
+					}
+				} else if *codingMethod == "LT" {
+					fmt.Println("LT encoding")
+					chunks, err = lt.LTEncode(string(originalData))
+					if err != nil {
+						fmt.Printf("Node %s failed to encode data: %v\n", *nodeID, err)
+						return
+					}
+					originalLength = len(string(originalData))
+					log.WithFields(logrus.Fields{"Original Length": originalLength}).Info("Org Size")
+				} else {
+					panic("Invalid coding method")
+				}
+
+				nodeData := config.NodeData{OriginalData: string(originalData), Chunks: chunks, Received: make(map[int][]byte)}
+				config.ReceivedChunks.Store(*nodeID, &nodeData)
+				fmt.Println("Leng of chunks", len(chunks))
+				for i, chunk := range chunks {
+					if *codingMethod == "LT" {
+						fmt.Println("LT code broadcasting")
+						
+							handlers.SendChunkWithOriginalLength(ctx, h, config.ConnectedPeers[i], i, chunk, originalLength)
+						
+					} else {
+						handlers.SendChunk(ctx, h, config.ConnectedPeers[i], i, chunk)
+					}
 				}
 				break
 			}
