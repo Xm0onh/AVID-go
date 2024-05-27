@@ -72,8 +72,7 @@ func HandleStream(s network.Stream, h host.Host, peerChan chan peer.AddrInfo, wg
 		}
 
 		// Sanity check for length
-		
-		if length > 1100000 { // 1.1MB
+		if length > 10*1024*1024 { // Assuming 10MB as an arbitrary large chunk size
 			fmt.Printf("Unreasonably large chunk length received: %d\n", length)
 			s.Reset()
 			return
@@ -100,6 +99,7 @@ func HandleStream(s network.Stream, h host.Host, peerChan chan peer.AddrInfo, wg
 		peerChan <- peer.AddrInfo{ID: s.Conn().RemotePeer()}
 	}
 }
+
 
 
 func HandleReadyStream(s network.Stream, h host.Host, wg *sync.WaitGroup) {
@@ -274,6 +274,7 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 		outputFilePath := fmt.Sprintf("output/%s_out.txt", nodeID)
 		if err := os.WriteFile(outputFilePath, []byte(decodedData), 0644); err != nil {
 			fmt.Printf("Node %s failed to write reconstructed data to file: %v\n", nodeID, err)
+			panic(err)
 			return
 		}
 		log.WithFields(logrus.Fields{"nodeID": nodeID}).Info("Node reconstructed data")

@@ -50,5 +50,5 @@ var (
 	ChunksRecByNode = make([][]byte, LTEncodedBlockCount)
 	ReadyCounter    = 0
 	StartTime       time.Time
-	OriginalLength  = 10562979
+	OriginalLength  = 1464184
 )

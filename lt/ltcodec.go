@@ -46,7 +46,6 @@ func LTEncode(data string) ([][]byte, error) {
 }
 
 func LTDecode(chunks [][]byte) (string, error) {
-	fmt.Println("Received chunks", chunks)
 	random := rand.New(rand.NewSource(config.RandomSeed))
 	codec := NewLubyCodec(config.LTSourceBlocks, random, SolitonDistribution(config.LTSourceBlocks))
 	decoder := codec.NewDecoder(config.OriginalLength)
