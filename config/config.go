@@ -17,9 +17,12 @@ type NodeData struct {
 }
 
 const (
-	DataShards     = 5
-	ParityShards   = 3
-	ExpectedChunks = 5
+	DataShards          = 5
+	ParityShards        = 3
+	ExpectedChunks      = 5
+	LTSourceBlocks      = 6
+	LTEncodedBlockCount = 10
+	RandomSeed          = 42
 )
 
 var (
