@@ -40,11 +40,16 @@ func RSDecode(shards [][]byte) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to reconstruct data shards: %v", err)
 	}
+
 	var buf bytes.Buffer
 	err = enc.Join(&buf, shards, len(shards[0])*dataShards)
 	if err != nil {
 		return "", fmt.Errorf("failed to join shards: %v", err)
 	}
 
-	return buf.String(), nil
+	// Convert buffer to string and trim null padding
+	decodedData := buf.String()
+	trimmedData := decodedData[:len(decodedData)-bytes.Count([]byte(decodedData), []byte{0})]
+
+	return trimmedData, nil
 }
