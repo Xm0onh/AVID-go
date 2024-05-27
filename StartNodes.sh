@@ -1,10 +1,15 @@
 #!/bin/bash
 
+ps aux | grep go | grep -v grep | awk '{print $2}' | xargs kill -9
+
 rm -f DispersalNode.txt
 rm -f bootstrap_addrs.txt
 
+rm -rf output
+mkdir output
+
 # Number of regular nodes to start
-NUM_NODES=18
+NUM_NODES=6
 PORT_BASE=4007
 BOOTSTRAP_PORT_BASE=4001
 BOOTSTRAP_NODES=3

@@ -17,13 +17,13 @@ type NodeData struct {
 }
 
 const (
-	DataShards     = 15
-	ParityShards   = 5
-	ExpectedChunks = 15
+	DataShards     = 5
+	ParityShards   = 3
+	ExpectedChunks = 5
 )
 
 var (
-	Nodes           = 18
+	Nodes           = 6
 	ReceivedChunks  = sync.Map{}
 	SentChunks      = sync.Map{}
 	NodeMutex       = sync.Mutex{}

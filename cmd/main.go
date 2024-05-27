@@ -21,6 +21,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	tls "github.com/libp2p/go-libp2p/p2p/security/tls"
 	"github.com/multiformats/go-multiaddr"
+	"github.com/sirupsen/logrus"
 	BT "github.com/xm0onh/AVID-go/bootstrap"
 	"github.com/xm0onh/AVID-go/config"
 	"github.com/xm0onh/AVID-go/handlers"
@@ -28,11 +29,16 @@ import (
 )
 
 var broadcastSignal = make(chan struct{})
+var log = logrus.New()
 
 //	func init() {
 //		log.SetLogLevel("*", "debug")
 //	}
 func main() {
+	log.SetOutput(os.Stdout)
+	log.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp: true,
+	})
 	nodeID := flag.String("node", "", "Node ID")
 	bootstrap := flag.Bool("bootstrap", false, "Start as bootstrap node")
 	port := flag.Int("port", 0, "Port to listen on")
@@ -111,7 +117,6 @@ func main() {
 		}
 	}
 
-
 	var wg sync.WaitGroup
 	peerChan := make(chan peer.AddrInfo)
 	peerDataChan := make(chan peer.AddrInfo)
@@ -167,15 +172,22 @@ func main() {
 				<-broadcastSignal
 				config.StartTime = time.Now()
 				fmt.Println("Broadcasting chunks...")
-				originalData := "HelloLibP2PHelloLibP2PHelloLibP2PHelloLibP2PHelloLibP2PHelloLibP2PHelloLibP2PHelloLibP2P"
-				shards, err := rs.RSEncode(originalData)
+
+				originalFilePath := "test.txt"
+				originalData, err := os.ReadFile(originalFilePath)
+				if err != nil {
+					fmt.Printf("Node %s failed to read original data file: %v\n", *nodeID, err)
+					return
+				}
+
+				shards, err := rs.RSEncode(string(originalData))
 				fmt.Println("Length of shards:", len(shards))
 				fmt.Println("Number of Connected Peers:", len(config.ConnectedPeers))
 				if err != nil {
 					fmt.Printf("Node %s failed to encode data: %v\n", *nodeID, err)
 					return
 				}
-				nodeData := config.NodeData{OriginalData: originalData, Chunks: shards, Received: make(map[int][]byte)}
+				nodeData := config.NodeData{OriginalData: string(originalData), Chunks: shards, Received: make(map[int][]byte)}
 				config.ReceivedChunks.Store(*nodeID, &nodeData)
 
 				for i, shard := range shards[:config.Nodes-1] {

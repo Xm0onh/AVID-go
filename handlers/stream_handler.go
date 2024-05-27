@@ -6,16 +6,22 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
+
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
-	"github.com/xm0onh/AVID-go/rs"
 	"github.com/xm0onh/AVID-go/config"
+	"github.com/xm0onh/AVID-go/rs"
 )
+
+var log = logrus.New()
 
 func HandleStream(s network.Stream, h host.Host, peerChan chan peer.AddrInfo, wg *sync.WaitGroup, nodeID string) {
 	defer s.Close()
@@ -169,14 +175,20 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 	fmt.Println("Length of received chunks:", len(nodeData.Received))
 
 	if config.Counter == config.ExpectedChunks {
-		fmt.Println("Counter", config.Counter)
-		fmt.Printf("Node %s complete received data\n", nodeID)
+		log.WithFields(logrus.Fields{"nodeID": nodeID}).Info("Node complete received data")
 		decodedData, err := rs.RSDecode(config.ChunksRecByNode)
 		if err != nil {
 			fmt.Printf("Node %s failed to decode data: %v\n", nodeID, err)
 			return
 		}
-		fmt.Printf("Node %s reconstructed data: %s\n", nodeID, decodedData)
+		// Store the reconstructed data into a file
+		outputFilePath := fmt.Sprintf("output/%s_out.txt", nodeID)
+		if err := os.WriteFile(outputFilePath, []byte(decodedData), 0644); err != nil {
+			fmt.Printf("Node %s failed to write reconstructed data to file: %v\n", nodeID, err)
+			return
+		}
+		// fmt.Printf("Node %s reconstructed data: %s\n", nodeID, decodedData)
+		log.WithFields(logrus.Fields{"nodeID": nodeID}).Info("Node reconstructed data")
 
 		for _, peerInfo := range config.ConnectedPeers {
 			if peerInfo.ID.String() != nodeID {
