@@ -40,25 +40,41 @@ func HandleStream(s network.Stream, h host.Host, peerChan chan peer.AddrInfo, wg
 	config.NodeMutex.Unlock()
 
 	for {
-		// If this is the first chunk, read the original length
-		if config.Counter == 0 {
-			var originalLength int32
-			if err := binary.Read(reader, binary.LittleEndian, &originalLength); err != nil {
-				fmt.Println("Error reading original length from stream:", err)
-				s.Reset()
-				return
+		// Read the chunk index
+		var chunkIndex int32
+		if err := binary.Read(reader, binary.LittleEndian, &chunkIndex); err != nil {
+			if err.Error() == "EOF" {
+				break
 			}
-			config.OriginalLength = int(originalLength)
-			fmt.Printf("Received original length: %d\n", config.OriginalLength)
+			fmt.Println("Error reading chunk index from stream:", err)
+			s.Reset()
+			return
 		}
 
-		// Read the length of the incoming chunk data
+		// Verify the chunk index
+		if chunkIndex < 0 || chunkIndex >= int32(len(config.ChunksRecByNode)) {
+			fmt.Printf("Invalid chunk index received: %d\n", chunkIndex)
+			s.Reset()
+			return
+		}
+
+		fmt.Printf("Chunk index ------>: %d\n", chunkIndex)
+
+		// Read the length of the chunk data
 		var length uint32
 		if err := binary.Read(reader, binary.LittleEndian, &length); err != nil {
 			if err.Error() == "EOF" {
 				break
 			}
 			fmt.Println("Error reading length from stream:", err)
+			s.Reset()
+			return
+		}
+
+		// Sanity check for length
+		
+		if length > 1100000 { // 1.1MB
+			fmt.Printf("Unreasonably large chunk length received: %d\n", length)
 			s.Reset()
 			return
 		}
@@ -71,30 +87,20 @@ func HandleStream(s network.Stream, h host.Host, peerChan chan peer.AddrInfo, wg
 			return
 		}
 
-		// Read the chunk index
-		var chunkIndex int32
-		if err := binary.Read(reader, binary.LittleEndian, &chunkIndex); err != nil {
-			fmt.Println("Error reading chunk index from stream:", err)
-			s.Reset()
-			return
-		}
-
-		// At this point, buf only contains the chunk data
+		// Process the received chunk
 		receivedData := buf
-		// fmt.Printf("Received data chunk %d: %s\n", chunkIndex, receivedData)
+		// fmt.Printf("Received data: %v\n", receivedData)
 
-		// Store the received chunk for later processing
 		receivedFromKey := fmt.Sprintf("%s-%d", s.Conn().RemotePeer().String(), chunkIndex)
-		fmt.Printf("Storing origin %s for chunk\n", s.Conn().RemotePeer().String())
+		fmt.Printf("Storing origin %s for chunk %d\n", s.Conn().RemotePeer().String(), chunkIndex)
 		config.ReceivedFrom.Store(receivedFromKey, s.Conn().RemotePeer().String())
 
-		// Call the function to store the received chunk
 		StoreReceivedChunk(s.Conn().RemotePeer().String(), int(chunkIndex), receivedData, h, peerChan)
 
-		// Notify that a chunk has been received
 		peerChan <- peer.AddrInfo{ID: s.Conn().RemotePeer()}
 	}
 }
+
 
 func HandleReadyStream(s network.Stream, h host.Host, wg *sync.WaitGroup) {
 	defer s.Close()
@@ -117,52 +123,63 @@ func HandleReadyStream(s network.Stream, h host.Host, wg *sync.WaitGroup) {
 	}
 }
 
-func SendChunkWithOriginalLength(ctx context.Context, h host.Host, pi peer.AddrInfo, chunkIndex int, chunk []byte, originalLength int) {
-	s, err := h.NewStream(ctx, pi.ID, protocol.ID("/chunk"))
-	if err != nil {
-		fmt.Println("Error creating stream:", err)
-		return
-	}
-	defer s.Close()
+// func SendChunkWithOriginalLength(ctx context.Context, h host.Host, pi peer.AddrInfo, chunkIndex int, chunk []byte, originalLength int) {
+// 	s, err := h.NewStream(ctx, pi.ID, protocol.ID("/chunk"))
+// 	if err != nil {
+// 		fmt.Println("Error creating stream:", err)
+// 		return
+// 	}
+// 	defer s.Close()
 
-	// First, write the original length
-	if err := binary.Write(s, binary.LittleEndian, int32(originalLength)); err != nil {
-		fmt.Println("Error writing original length to stream:", err)
-		s.Reset()
-		return
-	}
+// 	// First, write the original length
+// 	if err := binary.Write(s, binary.LittleEndian, int32(originalLength)); err != nil {
+// 		fmt.Println("Error writing original length to stream:", err)
+// 		s.Reset()
+// 		return
+// 	}
 
-	// Next, write the length of the chunk
-	if err := binary.Write(s, binary.LittleEndian, uint32(len(chunk))); err != nil {
-		fmt.Println("Error writing length to stream:", err)
-		s.Reset()
-		return
-	}
+// 	// Next, write the length of the chunk
+// 	if err := binary.Write(s, binary.LittleEndian, uint32(len(chunk))); err != nil {
+// 		fmt.Println("Error writing length to stream:", err)
+// 		s.Reset()
+// 		return
+// 	}
 
-	// Write the chunk data
-	if _, err := s.Write(chunk); err != nil {
-		fmt.Println("Error writing to stream:", err)
-		s.Reset()
-		return
-	}
+// 	// Write the chunk data
+// 	if _, err := s.Write(chunk); err != nil {
+// 		fmt.Println("Error writing to stream:", err)
+// 		s.Reset()
+// 		return
+// 	}
 
-	// Finally, write the chunk index
-	if err := binary.Write(s, binary.LittleEndian, int32(chunkIndex)); err != nil {
-		fmt.Println("Error writing chunk index to stream:", err)
-		s.Reset()
-		return
-	}
+// 	// Finally, write the chunk index
+// 	if err := binary.Write(s, binary.LittleEndian, int32(chunkIndex)); err != nil {
+// 		fmt.Println("Error writing chunk index to stream:", err)
+// 		s.Reset()
+// 		return
+// 	}
 
-	fmt.Printf("Sent chunk with original length to %s: %s\n", pi.ID.String(), chunk)
-}
+// 	fmt.Printf("Sent chunk with original length to %s: %s\n", pi.ID.String(), chunk)
+// }
 
 func SendChunk(ctx context.Context, h host.Host, pi peer.AddrInfo, chunkIndex int, chunk []byte) {
+	if len(chunk) == 0 {
+		fmt.Printf("Not sending empty chunk %d\n", chunkIndex)
+		return
+	}
+
 	s, err := h.NewStream(ctx, pi.ID, protocol.ID("/chunk"))
 	if err != nil {
 		fmt.Println("Error creating stream:", err)
 		return
 	}
 	defer s.Close()
+
+	if err := binary.Write(s, binary.LittleEndian, int32(chunkIndex)); err != nil {
+		fmt.Println("Error writing chunk index to stream:", err)
+		s.Reset()
+		return
+	}
 
 	if err := binary.Write(s, binary.LittleEndian, uint32(len(chunk))); err != nil {
 		fmt.Println("Error writing length to stream:", err)
@@ -176,13 +193,9 @@ func SendChunk(ctx context.Context, h host.Host, pi peer.AddrInfo, chunkIndex in
 		return
 	}
 
-	if err := binary.Write(s, binary.LittleEndian, int32(chunkIndex)); err != nil {
-		fmt.Println("Error writing chunk index to stream:", err)
-		s.Reset()
-		return
-	}
-
-	fmt.Printf("Sent chunk to %s: %s\n", pi.ID.String(), chunk)
+	// fmt.Printf("Sent chunk  to %s: %s\n", pi.ID.String(), chunk)
+	// Send chunk $id to $peerID
+	fmt.Printf("Sent chunk %d to %s\n", chunkIndex, pi.ID.String())
 }
 
 func SendReady(ctx context.Context, h host.Host, pi peer.AddrInfo, peerID string) {
@@ -220,17 +233,16 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 		config.ReceivedChunks.Store(nodeID, data)
 	}
 	nodeData := data.(*config.NodeData)
+
 	config.ChunksRecByNode[chunkIndex] = chunk
 	fmt.Println("counter", config.Counter)
-	// fmt.Println("chunksRecByNode", config.ChunksRecByNode)
 	if existingChunk, exists := nodeData.Received[chunkIndex]; exists && bytes.Equal(existingChunk, chunk) {
 		fmt.Printf("Node %s already has chunk %d: %s\n", nodeID, chunkIndex, chunk)
 		return
 	}
 
 	nodeData.Received[chunkIndex] = chunk
-	// fmt.Printf("nodeid %s data %v\n", nodeID, nodeData.Received)
-	fmt.Printf("Node %s received chunk %d: %s\n", nodeID, chunkIndex, chunk)
+	fmt.Printf("Node %s received chunk %d\n", nodeID, chunkIndex)
 	fmt.Println("Length of received chunks:", len(nodeData.Received))
 
 	if config.Counter == config.ExpectedChunks {
@@ -238,9 +250,17 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 
 		var decodedData string
 		var err error
-		fmt.Println("Coding method", config.CodingMethod)
+		// fmt.Println("Coding method", config.CodingMethod)
+
+		var validChunks [][]byte
+		for _, chunk := range config.ChunksRecByNode[:config.ExpectedChunks] {
+			if len(chunk) > 0 {
+				validChunks = append(validChunks, chunk)
+			}
+		}
+
 		if config.CodingMethod == "LT" {
-			decodedData, err = lt.LTDecode(config.ChunksRecByNode[:config.ExpectedChunks], config.OriginalLength)
+			decodedData, err = lt.LTDecode(validChunks)
 			fmt.Println("decodedData", decodedData)
 		} else if config.CodingMethod == "RS" {
 			decodedData, err = rs.RSDecode(config.ChunksRecByNode[:config.ExpectedChunks])
@@ -256,7 +276,6 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 			fmt.Printf("Node %s failed to write reconstructed data to file: %v\n", nodeID, err)
 			return
 		}
-		// fmt.Printf("Node %s reconstructed data: %s\n", nodeID, decodedData)
 		log.WithFields(logrus.Fields{"nodeID": nodeID}).Info("Node reconstructed data")
 
 		for _, peerInfo := range config.ConnectedPeers {

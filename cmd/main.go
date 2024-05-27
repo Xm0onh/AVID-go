@@ -50,7 +50,7 @@ func main() {
 
 	if *codingMethod == "LT" {
 		config.CodingMethod = "LT"
-	} else if *codingMethod == "RS"{
+	} else if *codingMethod == "RS" {
 		config.CodingMethod = "RS"
 	} else {
 		fmt.Println("Invalid coding method. Please specify either 'RS' or 'LT'.")
@@ -179,6 +179,7 @@ func main() {
 
 			if *nodeID == "Node1" && len(config.ConnectedPeers) > config.Nodes-1 {
 				fmt.Println("Node 1 is ready to broadcast chunks. Type 'start' to begin broadcasting.")
+				fmt.Println("Number of Peers:", len(config.ConnectedPeers))
 				<-broadcastSignal
 				config.StartTime = time.Now()
 				fmt.Println("Broadcasting chunks...")
@@ -202,11 +203,13 @@ func main() {
 				} else if *codingMethod == "LT" {
 					fmt.Println("LT encoding")
 					chunks, err = lt.LTEncode(string(originalData))
+					// Size of each chunk in byte
+					fmt.Println("Size of each chunk in byte", len(chunks[0]))
 					if err != nil {
 						fmt.Printf("Node %s failed to encode data: %v\n", *nodeID, err)
 						return
 					}
-					originalLength = len(string(originalData))
+					// originalLength = len(string(originalData))
 					log.WithFields(logrus.Fields{"Original Length": originalLength}).Info("Org Size")
 				} else {
 					panic("Invalid coding method")
@@ -218,9 +221,8 @@ func main() {
 				for i, chunk := range chunks {
 					if *codingMethod == "LT" {
 						fmt.Println("LT code broadcasting")
-						
-							handlers.SendChunkWithOriginalLength(ctx, h, config.ConnectedPeers[i], i, chunk, originalLength)
-						
+						handlers.SendChunk(ctx, h, config.ConnectedPeers[i], i, chunk)
+
 					} else {
 						handlers.SendChunk(ctx, h, config.ConnectedPeers[i], i, chunk)
 					}
@@ -233,6 +235,7 @@ func main() {
 
 	go func() {
 		for pi := range peerDataChan {
+			log.WithFields(logrus.Fields{"Number of Peers": len(peerDataChan)}).Info("#Peers")
 			receivedChunk, ok := config.ReceivedChunks.Load(pi.ID.String())
 			fmt.Println("Received chunk from", pi.ID.String())
 			if !ok {
@@ -242,23 +245,23 @@ func main() {
 
 			nodeData := receivedChunk.(*config.NodeData)
 			for index, chunk := range nodeData.Received {
+				log.WithFields(logrus.Fields{"Number of Chunks": len(nodeData.Received)}).Info("#Chunks")
 				receivedFromKey := fmt.Sprintf("%s-%d", pi.ID.String(), index)
 				origSender, senderOk := config.ReceivedFrom.Load(receivedFromKey)
 
-				if senderOk && origSender.(string) == config.Node1ID.String() {
-					for _, peerInfo := range config.ConnectedPeers {
-						if peerInfo.ID != pi.ID && peerInfo.ID.String() != *nodeID && peerInfo.ID != config.Node1ID {
-							chunkKey := fmt.Sprintf("%s-%d", peerInfo.ID.String(), index)
-							if _, ok := config.SentChunks.Load(chunkKey); !ok {
-								fmt.Printf("Sending chunk %d to %s\n", index, peerInfo.ID.String())
-								handlers.SendChunk(context.Background(), h, peerInfo, index, chunk)
-								config.SentChunks.Store(chunkKey, struct{}{})
-							} else {
-								fmt.Printf("Chunk %d already sent to %s\n", index, peerInfo.ID.String())
-							}
+				for _, peerInfo := range config.ConnectedPeers {
+					if peerInfo.ID != pi.ID && peerInfo.ID.String() != *nodeID && (senderOk && origSender.(string) == config.Node1ID.String()) {
+						chunkKey := fmt.Sprintf("%s-%d", peerInfo.ID.String(), index)
+						if _, ok := config.SentChunks.Load(chunkKey); !ok {
+							fmt.Printf("Sending chunk %d to %s\n", index, peerInfo.ID.String())
+							handlers.SendChunk(context.Background(), h, peerInfo, index, chunk)
+							config.SentChunks.Store(chunkKey, struct{}{})
+						} else {
+							fmt.Printf("Chunk %d already sent to %s\n", index, peerInfo.ID.String())
 						}
 					}
 				}
+
 			}
 		}
 	}()
