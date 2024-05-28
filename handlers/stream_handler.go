@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"os"
+
 	"github.com/sirupsen/logrus"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -27,11 +27,6 @@ var flag = true
 
 const subChunkSize = 256 * 1024 // 256 KB
 const maxRetries = 5
-
-func init() {
-	// Initialize the logger
-	log.SetLevel(logrus.DebugLevel)
-}
 
 // Helper function to write sub-chunks to the stream
 func writeSubChunks(stream network.Stream, chunk []byte) error {
@@ -314,7 +309,7 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 
 		if config.Counter == config.ExpectedChunks {
 			log.WithFields(logrus.Fields{"nodeID": nodeID}).Info("Node complete received data")
-			var decodedData string
+			// var decodedData string
 			var err error
 			log.WithField("codingMethod", config.CodingMethod).Info("Node decoding data")
 			droplets := make([][]byte, 0, config.ExpectedChunks)
@@ -326,10 +321,10 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 				}
 				_, err = lt.LTDecode(droplets)
 			} else if config.CodingMethod == "RS" {
-				decodedData, err = rs.RSDecode(config.ChunksRecByNode)
+				_, err = rs.RSDecode(config.ChunksRecByNode)
 			}
 
-			if (err != nil) && (config.CodingMethod == "LT"){
+			if (err != nil) && (config.CodingMethod == "LT") {
 				log.WithFields(logrus.Fields{"nodeID": nodeID, "Error": err, "length of valid chunks:": len(droplets)}).Error("Node failed to decode data")
 				flag = false
 				return
@@ -341,11 +336,11 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 
 			log.WithFields(logrus.Fields{"nodeID": nodeID}).Info("Node reconstructed data")
 
-			outputFilePath := fmt.Sprintf("output/%s_out.txt", config.NodeID)
-			if err := os.WriteFile(outputFilePath, []byte(decodedData), 0644); err != nil {
-				log.WithFields(logrus.Fields{"nodeID": nodeID, "Error": err}).Error("Node failed to write reconstructed data to file")
-				return
-			}
+			// outputFilePath := fmt.Sprintf("output/%s_out.txt", config.NodeID)
+			// if err := os.WriteFile(outputFilePath, []byte(decodedData), 0644); err != nil {
+			// 	log.WithFields(logrus.Fields{"nodeID": nodeID, "Error": err}).Error("Node failed to write reconstructed data to file")
+			// 	return
+			// }
 
 			for _, peerInfo := range config.ConnectedPeers {
 				if peerInfo.ID.String() != nodeID {
