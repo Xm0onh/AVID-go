@@ -9,10 +9,10 @@ rm -rf output
 mkdir output
 
 # Number of regular nodes to start
-NUM_NODES=24
+NUM_NODES=25
 PORT_BASE=4007
 BOOTSTRAP_PORT_BASE=4001
-BOOTSTRAP_NODES=3
+BOOTSTRAP_NODES=5
 BOOTSTRAP_READY_TIMEOUT=30
 IP_BASE="127.0.0."
 CODING_METHOD="LT"
@@ -20,7 +20,7 @@ CODING_METHOD="LT"
 
 # Function to set up IP aliases
 setup_ip_aliases() {
-    for i in $(seq 1 $((BOOTSTRAP_NODES + NUM_NODES))); do
+    for i in $(seq 1 $((BOOTSTRAP_NODES + NUM_NODES + 1))); do
         ip_suffix=$((i + 1))
         ip="${IP_BASE}${ip_suffix}"
         if ! ifconfig lo0 | grep -q "$ip"; then

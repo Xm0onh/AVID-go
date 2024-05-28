@@ -1,6 +1,5 @@
 package main
 
-
 import (
 	"bufio"
 	"context"
@@ -177,8 +176,11 @@ func main() {
 			// fmt.Printf("Node %s connected to %s\n", *nodeID, pi.ID.String())
 			fmt.Printf("Node %s connected to peer %s at %v\n", *nodeID, pi.ID.String(), pi.Addrs)
 			config.ConnectedPeers = append(config.ConnectedPeers, pi)
-
-			if *nodeID == "Node1" && len(config.ConnectedPeers) > config.Nodes-1 {
+			if len(config.ConnectedPeers) == config.ExpectedChunks {
+				log.Info("All nodes connected")
+			}
+			//
+			if *nodeID == "Node1" && (len(config.ConnectedPeers) == config.Nodes) {
 				fmt.Println("Node 1 is ready to broadcast chunks. Type 'start' to begin broadcasting.")
 				fmt.Println("Number of Peers:", len(config.ConnectedPeers))
 				<-broadcastSignal
@@ -219,15 +221,16 @@ func main() {
 				nodeData := config.NodeData{OriginalData: string(originalData), Chunks: chunks, Received: make(map[int][]byte)}
 				config.ReceivedChunks.Store(*nodeID, &nodeData)
 				fmt.Println("Leng of chunks", len(chunks))
-				for i, chunk := range chunks {
+				for i := range config.ConnectedPeers {
 					if *codingMethod == "LT" {
 						fmt.Println("LT code broadcasting")
-						handlers.SendChunk(ctx, h, config.ConnectedPeers[i], i, chunk)
-
+						handlers.SendChunk(ctx, h, config.ConnectedPeers[i%len(chunks)], i%len(chunks), chunks[i%len(chunks)])
+						time.Sleep(50 * time.Millisecond)
 					} else {
-						handlers.SendChunk(ctx, h, config.ConnectedPeers[i], i, chunk)
+						handlers.SendChunk(ctx, h, config.ConnectedPeers[i], i, chunks[i])
 					}
 				}
+
 				break
 			}
 			time.Sleep(1 * time.Second)
@@ -236,7 +239,6 @@ func main() {
 
 	go func() {
 		for pi := range peerDataChan {
-			log.WithFields(logrus.Fields{"Number of Peers": len(peerDataChan)}).Info("#Peers")
 			receivedChunk, ok := config.ReceivedChunks.Load(pi.ID.String())
 			fmt.Println("Received chunk from", pi.ID.String())
 			if !ok {
@@ -246,7 +248,6 @@ func main() {
 
 			nodeData := receivedChunk.(*config.NodeData)
 			for index, chunk := range nodeData.Received {
-				log.WithFields(logrus.Fields{"Number of Chunks": len(nodeData.Received)}).Info("#Chunks")
 				receivedFromKey := fmt.Sprintf("%s-%d", pi.ID.String(), index)
 				origSender, senderOk := config.ReceivedFrom.Load(receivedFromKey)
 
@@ -257,6 +258,7 @@ func main() {
 							fmt.Printf("Sending chunk %d to %s\n", index, peerInfo.ID.String())
 							handlers.SendChunk(context.Background(), h, peerInfo, index, chunk)
 							config.SentChunks.Store(chunkKey, struct{}{})
+							time.Sleep(50 * time.Millisecond)
 						} else {
 							fmt.Printf("Chunk %d already sent to %s\n", index, peerInfo.ID.String())
 						}
