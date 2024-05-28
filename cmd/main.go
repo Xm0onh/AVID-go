@@ -47,7 +47,7 @@ func main() {
 	codingMethod := flag.String("coding", "RS", "Coding method (RS, LT)")
 
 	flag.Parse()
-
+	config.NodeID = *nodeID
 	if *codingMethod == "LT" {
 		config.CodingMethod = "LT"
 	} else if *codingMethod == "RS" {
@@ -227,7 +227,7 @@ func main() {
 						handlers.SendChunk(ctx, h, config.ConnectedPeers[i%len(chunks)], i%len(chunks), chunks[i%len(chunks)])
 						time.Sleep(50 * time.Millisecond)
 					} else {
-						handlers.SendChunk(ctx, h, config.ConnectedPeers[i], i, chunks[i])
+						handlers.SendChunk(ctx, h, config.ConnectedPeers[i%len(chunks)], i%len(chunks), chunks[i%len(chunks)])
 					}
 				}
 

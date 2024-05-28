@@ -9,13 +9,13 @@ rm -rf output
 mkdir output
 
 # Number of regular nodes to start
-NUM_NODES=25
+NUM_NODES=10
 PORT_BASE=4007
 BOOTSTRAP_PORT_BASE=4001
-BOOTSTRAP_NODES=5
+BOOTSTRAP_NODES=1
 BOOTSTRAP_READY_TIMEOUT=30
 IP_BASE="127.0.0."
-CODING_METHOD="LT"
+CODING_METHOD="RS"
 
 
 # Function to set up IP aliases
@@ -47,7 +47,7 @@ check_bootstrap_ready() {
 setup_ip_aliases
 
 # Start the bootstrap nodes first
-for i in $(seq 1 $BOOTSTRAP_NODES)
+for i in $(seq 0 $BOOTSTRAP_NODES)
 do
     ip_suffix=$((i + 1))
     ip="${IP_BASE}${ip_suffix}"
@@ -55,7 +55,7 @@ do
 done
 
 # Wait for all bootstrap nodes to be ready
-for i in $(seq 1 $BOOTSTRAP_NODES)
+for i in $(seq 0 $BOOTSTRAP_NODES)
 do
     ip_suffix=$((i + 1))
     ip="${IP_BASE}${ip_suffix}"

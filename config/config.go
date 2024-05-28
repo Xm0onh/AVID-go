@@ -18,7 +18,7 @@ type NodeData struct {
 
 // Must change respected to the codign method
 const (
-	ExpectedChunks = 18
+	ExpectedChunks = 5
 )
 
 // Reed-Solomon parameters
@@ -29,14 +29,15 @@ const (
 
 // Luby-Transform parameters
 const (
-	LTSourceBlocks      = 10
-	LTEncodedBlockCount = 25
+	LTSourceBlocks      = 5
+	LTEncodedBlockCount = 7
 	RandomSeed          = 42
 )
 
 var (
+	NodeID         string
 	CodingMethod   string
-	Nodes          = 25
+	Nodes          = 10
 	ReceivedChunks = sync.Map{}
 	SentChunks     = sync.Map{}
 	NodeMutex      = sync.Mutex{}
@@ -47,7 +48,7 @@ var (
 	// Must be changed to the coding method
 	// if LT then it should be LTEncodedBlockCount
 	// if RS then it should be DataShards + ParityShards
-	ChunksRecByNode = make([][]byte, LTEncodedBlockCount)
+	ChunksRecByNode = make([][]byte, DataShards+ParityShards)
 	ReadyCounter    = 0
 	StartTime       time.Time
 	OriginalLength  = 14641840
