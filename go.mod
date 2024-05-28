@@ -3,6 +3,7 @@ module github.com/xm0onh/AVID-go
 go 1.22.1
 
 require (
+	github.com/google/gofountain v0.0.0-20160820054803-4928733085e9
 	github.com/klauspost/reedsolomon v1.12.1
 	github.com/libp2p/go-libp2p v0.34.1
 	github.com/libp2p/go-libp2p-kad-dht v0.25.2

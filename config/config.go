@@ -18,20 +18,25 @@ type NodeData struct {
 
 // Must change respected to the codign method
 const (
-	ExpectedChunks = 6
+	ExpectedChunks = 60
 )
 
 // Reed-Solomon parameters
 const (
-	DataShards   = 5
-	ParityShards = 3
+	DataShards   = 55
+	ParityShards = 10
 )
 
 // Luby-Transform parameters
 const (
-	LTSourceBlocks      = 5
-	LTEncodedBlockCount = 7
+	LTSourceBlocks      = 50
+	LTEncodedBlockCount = 65
 	RandomSeed          = 42
+)
+
+const (
+	RaptorSourceBlocks      = 10
+	RaptorEncodedBlockCount = 15
 )
 
 var (

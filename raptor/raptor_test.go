@@ -1,4 +1,4 @@
-package luby
+package raptor
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"github.com/xm0onh/AVID-go/config"
 )
 
-func TestLTEncodeDecode(t *testing.T) {
+func TestRaptorEncodeDecode(t *testing.T) {
 	// Specify the file path
 	filePath := "../test.txt"
 
@@ -19,7 +19,7 @@ func TestLTEncodeDecode(t *testing.T) {
 	assert.NoError(t, err, "Error opening file")
 	defer file.Close()
 
-	// size of file
+	// Get the size of the file
 	fileInfo, _ := file.Stat()
 	fmt.Println("File size: ", fileInfo.Size())
 	originalData, err := os.ReadFile(filePath)
@@ -31,20 +31,20 @@ func TestLTEncodeDecode(t *testing.T) {
 	timeStart := time.Now()
 
 	encodeTimeStart := time.Now()
-	chunks, err := LTEncode(string(originalData))
+	chunks, err := RaptorEncode(string(originalData))
+	fmt.Println("leng of chunks: ", len(chunks))
 	fmt.Println("Time taken - Encode: ", time.Since(encodeTimeStart))
 
-	assert.NoError(t, err, "LTEncode should not return an error")
+	assert.NoError(t, err, "RaptorEncode should not return an error")
 	assert.NotEmpty(t, chunks, "Encoded chunks should not be empty")
-	assert.Equal(t, config.LTEncodedBlockCount, len(chunks), "Number of encoded chunks should match LTEncodedBlockCount")
+	assert.Equal(t, config.RaptorEncodedBlockCount, len(chunks), "Number of encoded chunks should match RaptorEncodedBlockCount")
 
 	// Decode the encoded data
-
 	decodeTimeStart := time.Now()
-	decodedData, err := LTDecode(chunks)
+	decodedData, err := RaptorDecode(chunks)
 	fmt.Println("Time taken - Decode: ", time.Since(decodeTimeStart))
 
-	assert.NoError(t, err, "LTDecode should not return an error")
+	assert.NoError(t, err, "RaptorDecode should not return an error")
 	assert.Equal(t, string(originalData), decodedData, "Decoded data should match the original")
 	fmt.Println("Time taken: ", time.Since(timeStart))
 }
