@@ -18,7 +18,7 @@ type NodeData struct {
 
 // Must change respected to the codign method
 const (
-	ExpectedChunks = 5
+	ExpectedChunks = 6
 )
 
 // Reed-Solomon parameters
@@ -51,5 +51,5 @@ var (
 	ChunksRecByNode = make([][]byte, DataShards+ParityShards)
 	ReadyCounter    = 0
 	StartTime       time.Time
-	OriginalLength  = 14641840
+	OriginalLength  = 29283680
 )

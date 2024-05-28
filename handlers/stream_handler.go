@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-
+	"os"
 	"github.com/sirupsen/logrus"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -314,7 +314,7 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 
 		if config.Counter == config.ExpectedChunks {
 			log.WithFields(logrus.Fields{"nodeID": nodeID}).Info("Node complete received data")
-			// var decodedData string
+			var decodedData string
 			var err error
 			log.WithField("codingMethod", config.CodingMethod).Info("Node decoding data")
 			droplets := make([][]byte, 0, config.ExpectedChunks)
@@ -326,7 +326,7 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 				}
 				_, err = lt.LTDecode(droplets)
 			} else if config.CodingMethod == "RS" {
-				_, err = rs.RSDecode(config.ChunksRecByNode[:config.ExpectedChunks])
+				decodedData, err = rs.RSDecode(config.ChunksRecByNode)
 			}
 
 			if (err != nil) && (config.CodingMethod == "LT"){
@@ -336,16 +336,16 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 			} else if (err != nil) && (config.CodingMethod == "RS") {
 				log.WithFields(logrus.Fields{"nodeID": nodeID, "Error": err, "length of valid chunks:": len(config.ChunksRecByNode)}).Error("Node failed to decode data")
 				// flag = false
-				// return
+				return
 			}
 
 			log.WithFields(logrus.Fields{"nodeID": nodeID}).Info("Node reconstructed data")
 
-			// outputFilePath := fmt.Sprintf("output/%s_out.txt", config.NodeID)
-			// if err := os.WriteFile(outputFilePath, []byte(decodedData), 0644); err != nil {
-			// 	log.WithFields(logrus.Fields{"nodeID": nodeID, "Error": err}).Error("Node failed to write reconstructed data to file")
-			// 	return
-			// }
+			outputFilePath := fmt.Sprintf("output/%s_out.txt", config.NodeID)
+			if err := os.WriteFile(outputFilePath, []byte(decodedData), 0644); err != nil {
+				log.WithFields(logrus.Fields{"nodeID": nodeID, "Error": err}).Error("Node failed to write reconstructed data to file")
+				return
+			}
 
 			for _, peerInfo := range config.ConnectedPeers {
 				if peerInfo.ID.String() != nodeID {
