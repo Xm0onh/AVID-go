@@ -12,7 +12,7 @@ import (
 
 func TestRaptorEncodeDecode(t *testing.T) {
 	// Specify the file path
-	filePath := "../test.txt"
+	filePath := "../eth_transactions.json"
 
 	// Open the file
 	file, err := os.Open(filePath)

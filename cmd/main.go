@@ -187,7 +187,7 @@ func main() {
 				config.StartTime = time.Now()
 				fmt.Println("Broadcasting chunks...")
 
-				originalFilePath := "test.txt"
+				originalFilePath := "eth_transactions.json"
 				originalData, err := os.ReadFile(originalFilePath)
 				if err != nil {
 					fmt.Printf("Node %s failed to read original data file: %v\n", *nodeID, err)
@@ -251,16 +251,16 @@ func main() {
 				receivedFromKey := fmt.Sprintf("%s-%d", pi.ID.String(), index)
 				origSender, senderOk := config.ReceivedFrom.Load(receivedFromKey)
 
-				for _, peerInfo := range config.ConnectedPeers {
-					if peerInfo.ID != pi.ID && peerInfo.ID.String() != *nodeID && (senderOk && origSender.(string) == config.Node1ID.String()) {
-						chunkKey := fmt.Sprintf("%s-%d", peerInfo.ID.String(), index)
+				for i := 0; i < config.ExpectedChunks; i++ {
+					if config.ConnectedPeers[i].ID != pi.ID && config.ConnectedPeers[i].ID.String() != *nodeID && (senderOk && origSender.(string) == config.Node1ID.String()) {
+						chunkKey := fmt.Sprintf("%s-%d", config.ConnectedPeers[i].ID.String(), index)
 						if _, ok := config.SentChunks.Load(chunkKey); !ok {
-							fmt.Printf("Sending chunk %d to %s\n", index, peerInfo.ID.String())
-							handlers.SendChunk(context.Background(), h, peerInfo, index, chunk)
+							fmt.Printf("Sending chunk %d to %s\n", index, config.ConnectedPeers[i].ID.String())
+							handlers.SendChunk(context.Background(), h, config.ConnectedPeers[i], index, chunk)
 							config.SentChunks.Store(chunkKey, struct{}{})
 							time.Sleep(50 * time.Millisecond)
 						} else {
-							fmt.Printf("Chunk %d already sent to %s\n", index, peerInfo.ID.String())
+							fmt.Printf("Chunk %d already sent to %s\n", index, config.ConnectedPeers[i].ID.String())
 						}
 					}
 				}

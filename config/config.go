@@ -2,6 +2,7 @@ package config
 
 import (
 	"flag"
+	"math"
 	"sync"
 	"time"
 
@@ -18,31 +19,35 @@ type NodeData struct {
 
 // Must change respected to the codign method
 const (
-	ExpectedChunks = 60
+	ExpectedChunks = 27
 )
 
 // Reed-Solomon parameters
 const (
-	DataShards   = 55
+	DataShards   = 100
 	ParityShards = 10
 )
 
 // Luby-Transform parameters
 const (
-	LTSourceBlocks      = 50
-	LTEncodedBlockCount = 65
-	RandomSeed          = 42
+	LTSourceBlocks = 3
+	RandomSeed     = 42
+)
+
+var (
+	c                   = 2.0
+	LTEncodedBlockCount = int(c*math.Sqrt(float64(LTSourceBlocks))) + LTSourceBlocks
 )
 
 const (
 	RaptorSourceBlocks      = 10
-	RaptorEncodedBlockCount = 15
+	RaptorEncodedBlockCount = 12
 )
 
 var (
 	NodeID         string
 	CodingMethod   string
-	Nodes          = 10
+	Nodes          = 30
 	ReceivedChunks = sync.Map{}
 	SentChunks     = sync.Map{}
 	NodeMutex      = sync.Mutex{}
@@ -56,5 +61,5 @@ var (
 	ChunksRecByNode = make([][]byte, DataShards+ParityShards)
 	ReadyCounter    = 0
 	StartTime       time.Time
-	OriginalLength  = 29283680
+	OriginalLength  = 188762857
 )

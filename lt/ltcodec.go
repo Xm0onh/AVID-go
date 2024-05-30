@@ -4,29 +4,31 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"math/rand"
 
 	"github.com/xm0onh/AVID-go/config"
 	gofountain "github.com/xm0onh/AVID-go/gofountain"
 )
 
-var degree = gofountain.SolitonDistribution(config.LTSourceBlocks)
+// var degree = gofountain.SolitonDistribution(config.LTSourceBlocks)
 
 // var eps = 0.1 // Adjust the epsilon parameter as needed
 // var degree = onlineSolitonDistribution(eps)
 
-// var n = config.LTSourceBlocks // Number of source blocks
-// var c = 0.1
-// var m = int(c * math.Sqrt(float64(n))) // Calculated number of redundant blocks
-// var delta = 0.01                       // Failure probability
+var n = config.LTSourceBlocks // Number of source blocks
+var c = 1.5
+var m = int(c * math.Sqrt(float64(n))) // Number of encoded blocks
 
-// var degree = robustSolitonDistribution(n, m, delta)
+var delta = 0.01 // Failure probability
+
+var degree = gofountain.RobustSolitonDistribution(n, m, delta)
 
 var random = rand.New(rand.NewSource(config.RandomSeed))
 var codec = gofountain.NewLubyCodec(config.LTSourceBlocks, random, degree)
 
 func LTEncode(data string) ([][]byte, error) {
-
+	fmt.Println(config.LTEncodedBlockCount)
 	encodedBlockIDs := make([]int64, config.LTEncodedBlockCount)
 	for i := range encodedBlockIDs {
 		encodedBlockIDs[i] = int64(i)

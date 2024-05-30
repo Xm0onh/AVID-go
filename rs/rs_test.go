@@ -10,7 +10,7 @@ import (
 )
 
 func TestRSEncodeDecode(t *testing.T) {
-	filePath := "../test.txt"
+	filePath := "../eth_transactions.json"
 
 	// Open the file
 	file, err := os.Open(filePath)
@@ -27,6 +27,8 @@ func TestRSEncodeDecode(t *testing.T) {
 	encodeTimeStart := time.Now()
 	shards, err := RSEncode(string(originalData))
 	fmt.Println("Time taken - Encode: ", time.Since(encodeTimeStart))
+
+	fmt.Println("size of each shard in byte", len(shards))
 	assert.NoError(t, err, "RSEncode should not return an error")
 	shards[1] = nil
 	// fmt.Println("Shards", shards)
