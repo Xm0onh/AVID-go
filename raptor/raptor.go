@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/xm0onh/AVID-go/config"
-	gofountain "github.com/xm0onh/AVID-go/gofountain"
+	goltgoogle "github.com/xm0onh/AVID-go/goltgoogle"
 )
 
 // // Configuration variables (adjust these as needed)
@@ -16,7 +16,7 @@ import (
 // var delta = 0.01                       // Failure probability
 
 // var random = rand.New(rand.NewSource(config.RandomSeed))
-var codec = gofountain.NewRaptorCodec(config.RaptorSourceBlocks, 8) // Adjust alignment size if needed
+var codec = goltgoogle.NewRaptorCodec(config.RaptorSourceBlocks, 8) // Adjust alignment size if needed
 
 func RaptorEncode(data string) ([][]byte, error) {
 	encodedBlockIDs := make([]int64, config.RaptorEncodedBlockCount)
@@ -25,7 +25,7 @@ func RaptorEncode(data string) ([][]byte, error) {
 	}
 
 	message := []byte(data)
-	blocks := gofountain.EncodeLTBlocks(message, encodedBlockIDs, codec)
+	blocks := goltgoogle.EncodeLTBlocks(message, encodedBlockIDs, codec)
 
 	var chunks [][]byte
 	for _, blk := range blocks {
@@ -55,7 +55,7 @@ func RaptorEncode(data string) ([][]byte, error) {
 func RaptorDecode(chunks [][]byte) (string, error) {
 	decoder := codec.NewDecoder(config.OriginalLength)
 
-	var ltBlocks []gofountain.LTBlock
+	var ltBlocks []goltgoogle.LTBlock
 	for _, chunk := range chunks {
 		var blockCode int64
 		var dataLength uint32
@@ -78,7 +78,7 @@ func RaptorDecode(chunks [][]byte) (string, error) {
 			return "", fmt.Errorf("failed to read chunk data: %v", err)
 		}
 
-		ltBlocks = append(ltBlocks, gofountain.LTBlock{
+		ltBlocks = append(ltBlocks, goltgoogle.LTBlock{
 			BlockCode: blockCode,
 			Data:      data,
 		})

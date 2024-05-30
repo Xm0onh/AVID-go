@@ -1,4 +1,4 @@
-## gofountain
+## goltgoogle
 
 Go implementation of various fountain codes.
 Luby Transform, Online codes, Raptor code.

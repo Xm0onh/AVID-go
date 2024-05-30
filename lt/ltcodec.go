@@ -8,10 +8,10 @@ import (
 	"math/rand"
 
 	"github.com/xm0onh/AVID-go/config"
-	gofountain "github.com/xm0onh/AVID-go/gofountain"
+	goltgoogle "github.com/xm0onh/AVID-go/goltgoogle"
 )
 
-// var degree = gofountain.SolitonDistribution(config.LTSourceBlocks)
+// var degree = goltgoogle.SolitonDistribution(config.LTSourceBlocks)
 
 // var eps = 0.1 // Adjust the epsilon parameter as needed
 // var degree = onlineSolitonDistribution(eps)
@@ -22,10 +22,10 @@ var m = int(c * math.Sqrt(float64(n))) // Number of encoded blocks
 
 var delta = 0.01 // Failure probability
 
-var degree = gofountain.RobustSolitonDistribution(n, m, delta)
+var degree = goltgoogle.RobustSolitonDistribution(n, m, delta)
 
 var random = rand.New(rand.NewSource(config.RandomSeed))
-var codec = gofountain.NewLubyCodec(config.LTSourceBlocks, random, degree)
+var codec = goltgoogle.NewLubyCodec(config.LTSourceBlocks, random, degree)
 
 func LTEncode(data string) ([][]byte, error) {
 	fmt.Println(config.LTEncodedBlockCount)
@@ -34,7 +34,7 @@ func LTEncode(data string) ([][]byte, error) {
 		encodedBlockIDs[i] = int64(i)
 	}
 
-	encodedBlocks := gofountain.EncodeLTBlocks([]byte(data), encodedBlockIDs, codec)
+	encodedBlocks := goltgoogle.EncodeLTBlocks([]byte(data), encodedBlockIDs, codec)
 
 	var chunks [][]byte
 	for _, block := range encodedBlocks {
@@ -64,7 +64,7 @@ func LTEncode(data string) ([][]byte, error) {
 func LTDecode(chunks [][]byte) (string, error) {
 	decoder := codec.NewDecoder(config.OriginalLength)
 
-	var ltBlocks []gofountain.LTBlock
+	var ltBlocks []goltgoogle.LTBlock
 	for _, chunk := range chunks {
 		var blockCode int32
 		var dataLength uint32
@@ -87,7 +87,7 @@ func LTDecode(chunks [][]byte) (string, error) {
 			return "", fmt.Errorf("failed to read chunk data: %v", err)
 		}
 
-		ltBlocks = append(ltBlocks, gofountain.LTBlock{
+		ltBlocks = append(ltBlocks, goltgoogle.LTBlock{
 			BlockCode: int64(blockCode),
 			Data:      data,
 		})
@@ -105,17 +105,17 @@ func LTDecode(chunks [][]byte) (string, error) {
 	return string(decodedData), nil
 }
 
-func LTEncodeORG(data string) ([]gofountain.LTBlock, error) {
+func LTEncodeORG(data string) ([]goltgoogle.LTBlock, error) {
 	encodedBlockIDs := make([]int64, config.LTEncodedBlockCount)
 	for i := range encodedBlockIDs {
 		encodedBlockIDs[i] = int64(i)
 	}
 
-	encodedBlocks := gofountain.EncodeLTBlocks([]byte(data), encodedBlockIDs, codec)
+	encodedBlocks := goltgoogle.EncodeLTBlocks([]byte(data), encodedBlockIDs, codec)
 	return encodedBlocks, nil
 }
 
-func LTDecodeORG(encodedBlocks []gofountain.LTBlock) (string, error) {
+func LTDecodeORG(encodedBlocks []goltgoogle.LTBlock) (string, error) {
 	decoder := codec.NewDecoder(config.OriginalLength)
 
 	if !decoder.AddBlocks(encodedBlocks) {
