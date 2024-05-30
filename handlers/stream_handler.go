@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -356,6 +357,65 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 	} else {
 		return
 	}
+}
+
+func HandleDownloadStream(s network.Stream, h host.Host, wg *sync.WaitGroup) {
+	defer s.Close()
+	defer wg.Done()
+
+	config.ReadyCounter++
+	reader := bufio.NewReader(s)
+	var chunkIndex int32
+	if err := binary.Read(reader, binary.LittleEndian, &chunkIndex); err != nil {
+		fmt.Println("Error reading chunk index from stream:", err)
+		s.Reset()
+		return
+	}
+
+	peerID := s.Conn().RemotePeer().String()
+	fmt.Printf("Download request received for chunk %d from peer %s\n", chunkIndex, peerID)
+
+	originalFilePath := "eth_transactions.json"
+	originalData, _ := os.ReadFile(originalFilePath)
+
+	var chunks [][]byte
+
+	if config.CodingMethod == "RS" {
+		chunks, _ = rs.RSEncode(string(originalData))
+
+	} else if config.CodingMethod == "LT" {
+		fmt.Println("LT encoding")
+		chunks, _ = lt.LTEncode(string(originalData))
+	} else {
+		panic("Invalid coding method")
+	}
+
+	peerInfo := peer.AddrInfo{ID: s.Conn().RemotePeer()}
+
+	SendChunk(context.Background(), h, peerInfo, int(chunkIndex), chunks[chunkIndex])
+}
+
+func SendDownloadRequest(ctx context.Context, h host.Host, pi peer.AddrInfo, peerID string, chunkIndex string) {
+	s, err := h.NewStream(ctx, pi.ID, protocol.ID("/download"))
+	if err != nil {
+		fmt.Println("Error creating stream:", err)
+		return
+	}
+	defer s.Close()
+
+	writer := bufio.NewWriter(s)
+	if _, err := writer.WriteString(chunkIndex + "\n"); err != nil {
+		fmt.Println("Error writing to stream:", err)
+		s.Reset()
+		return
+	}
+	if err := writer.Flush(); err != nil {
+		fmt.Println("Error flushing stream:", err)
+		s.Reset()
+		return
+	}
+
+	fmt.Printf("Sent download request to %s to peer %s\n", pi.ID.String(), peerID)
 }
 
 func PrintReceivedChunks(nodeID string) {
