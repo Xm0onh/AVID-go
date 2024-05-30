@@ -26,7 +26,7 @@ var log = logrus.New()
 
 var flag = true
 
-const subChunkSize = 512 * 1024 // 256 KB
+const subChunkSize = 512 * 1024 // 512 KB
 const maxRetries = 5
 
 // Helper function to write sub-chunks to the stream
@@ -310,56 +310,59 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 		nodeData.Received[chunkIndex] = chunk
 		fmt.Printf("Node %s received chunk %d\n", nodeID, chunkIndex)
 		fmt.Println("Length of received chunks:", len(nodeData.Received))
+		if config.K != 1 {
+			if config.Counter == config.ExpectedChunks {
+				log.WithFields(logrus.Fields{"nodeID": nodeID}).Info("Node complete received data")
 
-		if config.Counter == config.ExpectedChunks {
-			log.WithFields(logrus.Fields{"nodeID": nodeID}).Info("Node complete received data")
-
-			var _ string
-			var err error
-			log.WithField("codingMethod", config.CodingMethod).Info("Node decoding data")
-			droplets := make([][]byte, 0, config.ExpectedChunks)
-			if config.CodingMethod == "LT" {
-				for _, droplet := range config.ChunksRecByNode {
-					if len(droplet) > 0 {
-						droplets = append(droplets, droplet)
-					}
-				}
-				_, err = lt.LTDecode(droplets)
-			} else if config.CodingMethod == "RS" {
-				_, err = rs.RSDecode(config.ChunksRecByNode)
-			}
-
-			if (err != nil) && (config.CodingMethod == "LT") {
-				log.WithFields(logrus.Fields{"nodeID": nodeID, "Error": err, "length of valid chunks:": len(droplets)}).Error("Node failed to decode data")
-				flag = false
-				return
-			} else if (err != nil) && (config.CodingMethod == "RS") {
-				log.WithFields(logrus.Fields{"nodeID": nodeID, "Error": err, "length of valid chunks:": len(config.ChunksRecByNode)}).Error("Node failed to decode data")
-				// flag = false
-				return
-			}
-
-			log.WithFields(logrus.Fields{"nodeID": nodeID}).Info("Node reconstructed data")
-
-			// outputFilePath := fmt.Sprintf("output/%s_out.txt", config.NodeID)
-			// if err := os.WriteFile(outputFilePath, []byte(decodedData), 0644); err != nil {
-			// 	log.WithFields(logrus.Fields{"nodeID": nodeID, "Error": err}).Error("Node failed to write reconstructed data to file")
-			// 	return
-			// }
-			if config.Mode == "upload" {
-				for _, peerInfo := range config.ConnectedPeers {
-					if peerInfo.ID.String() != nodeID {
-						readyKey := fmt.Sprintf("%s-ready", peerInfo.ID.String())
-						if _, ok := config.SentChunks.Load(readyKey); !ok {
-							SendReady(context.Background(), h, peerInfo, nodeID)
-							config.SentChunks.Store(readyKey, struct{}{})
+				var _ string
+				var err error
+				log.WithField("codingMethod", config.CodingMethod).Info("Node decoding data")
+				droplets := make([][]byte, 0, config.ExpectedChunks)
+				if config.CodingMethod == "LT" {
+					for _, droplet := range config.ChunksRecByNode {
+						if len(droplet) > 0 {
+							droplets = append(droplets, droplet)
 						}
 					}
+					_, err = lt.LTDecode(droplets)
+				} else if config.CodingMethod == "RS" {
+					_, err = rs.RSDecode(config.ChunksRecByNode)
 				}
-				time.Sleep(10 * time.Second)
-			} else if config.Mode == "download" {
-				logrus.WithField("Total time", time.Since(config.StartTime)).Info("Total time")
+
+				if (err != nil) && (config.CodingMethod == "LT") {
+					log.WithFields(logrus.Fields{"nodeID": nodeID, "Error": err, "length of valid chunks:": len(droplets)}).Error("Node failed to decode data")
+					flag = false
+					return
+				} else if (err != nil) && (config.CodingMethod == "RS") {
+					log.WithFields(logrus.Fields{"nodeID": nodeID, "Error": err, "length of valid chunks:": len(config.ChunksRecByNode)}).Error("Node failed to decode data")
+					// flag = false
+					return
+				}
+
+				log.WithFields(logrus.Fields{"nodeID": nodeID}).Info("Node reconstructed data")
+
+				// outputFilePath := fmt.Sprintf("output/%s_out.txt", config.NodeID)
+				// if err := os.WriteFile(outputFilePath, []byte(decodedData), 0644); err != nil {
+				// 	log.WithFields(logrus.Fields{"nodeID": nodeID, "Error": err}).Error("Node failed to write reconstructed data to file")
+				// 	return
+				// }
+				if config.Mode == "upload" {
+					for _, peerInfo := range config.ConnectedPeers {
+						if peerInfo.ID.String() != nodeID {
+							readyKey := fmt.Sprintf("%s-ready", peerInfo.ID.String())
+							if _, ok := config.SentChunks.Load(readyKey); !ok {
+								SendReady(context.Background(), h, peerInfo, nodeID)
+								config.SentChunks.Store(readyKey, struct{}{})
+							}
+						}
+					}
+					time.Sleep(10 * time.Second)
+				} else if config.Mode == "download" {
+					logrus.WithField("Total time", time.Since(config.StartTime)).Info("Total time")
+				}
 			}
+		} else {
+			logrus.WithField("Total time", time.Since(config.StartTime)).Info("Total time")
 		}
 	} else {
 		return
@@ -384,7 +387,11 @@ func HandleDownloadStream(s network.Stream, h host.Host, wg *sync.WaitGroup) {
 
 	originalFilePath := "eth_transactions.json"
 	originalData, _ := os.ReadFile(originalFilePath)
-
+	peerInfo := peer.AddrInfo{ID: s.Conn().RemotePeer()}
+	if config.K == 1 {
+		SendChunk(context.Background(), h, peerInfo, 0, originalData)
+		return
+	}
 	var chunks [][]byte
 
 	if config.CodingMethod == "RS" {
@@ -396,8 +403,6 @@ func HandleDownloadStream(s network.Stream, h host.Host, wg *sync.WaitGroup) {
 	} else {
 		panic("Invalid coding method")
 	}
-
-	peerInfo := peer.AddrInfo{ID: s.Conn().RemotePeer()}
 
 	SendChunk(context.Background(), h, peerInfo, int(chunkIndex), chunks[chunkIndex])
 }

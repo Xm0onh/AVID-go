@@ -8,11 +8,11 @@ rm -rf output
 mkdir output
 
 # Number of regular nodes to start
-NUM_NODES=10
+NUM_NODES=2
 PORT_BASE=4007
 BOOTSTRAP_PORT_BASE=4001
 BOOTSTRAP_NODES=1
-CODING_METHOD="RS"
+CODING_METHOD="LT"
 MODE="download"
 IP_BASE="127.0.0."
 
@@ -90,6 +90,7 @@ ip="${IP_BASE}7"
 tmux new-window -t nodes -n $session
 tmux send-keys -t nodes:$session "cd '$(pwd)' && cpulimit -l 50 -- go run ./cmd/main.go -node=Node1 -port=4006 -ip=$ip -mode=$MODE -coding=$CODING_METHOD" C-m
 
+sleep 2
 # Add network latency to Node 1
 # add_network_latency lo0 "50ms"
 
