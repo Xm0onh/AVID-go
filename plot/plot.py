@@ -17,4 +17,6 @@ plt.ylabel('Time (s)')
 plt.title('File downloading in a distributed network with RS and LT Codes')
 plt.legend()
 plt.grid(True)
+plt.annotate('File size: 1,000,000 ETH transactions (~10K Blocks)', xy=(0.5, 0.95), xycoords='axes fraction', fontsize=12, ha='center')
+
 plt.show()
