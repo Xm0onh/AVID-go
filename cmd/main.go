@@ -45,9 +45,14 @@ func main() {
 	port := flag.Int("port", 0, "Port to listen on")
 	ip := flag.String("ip", "127.0.0.1", "IP address to listen on")
 	codingMethod := flag.String("coding", "RS", "Coding method (RS, LT)")
+	mode := flag.String("mode", "download", "Mode (download, upload)")
 
 	flag.Parse()
 	config.NodeID = *nodeID
+	config.Mode = *mode
+
+	logrus.WithField("MODE", *mode).Info("Mode")
+
 	if *codingMethod == "LT" {
 		config.CodingMethod = "LT"
 	} else if *codingMethod == "RS" {
@@ -131,6 +136,13 @@ func main() {
 	peerChan := make(chan peer.AddrInfo)
 	peerDataChan := make(chan peer.AddrInfo)
 
+	if *mode == "download" {
+		h.SetStreamHandler(("/download"), func(s network.Stream) {
+			wg.Add(1)
+			go handlers.HandleDownloadStream(s, h, &wg)
+		})
+	}
+
 	h.SetStreamHandler("/chunk", func(s network.Stream) {
 		wg.Add(1)
 		go handlers.HandleStream(s, h, peerDataChan, &wg, *nodeID)
@@ -154,121 +166,164 @@ func main() {
 		os.Exit(1)
 	}()
 
-	go func() {
-		for pi := range peerChan {
+	if *mode == "upload" {
+		go func() {
+			for pi := range peerChan {
 
-			if err := h.Connect(ctx, pi); err != nil {
-				fmt.Printf("Error connecting to peer %s (retry %d): %v\n", pi.ID.String(), 0, err)
-				for i := 1; i <= 10; i++ {
-					time.Sleep(5 * time.Second)
-					if err := h.Connect(ctx, pi); err == nil {
-						fmt.Println("Finally Succeed!!")
-						fmt.Printf("Node %s connected to %s\n", *nodeID, pi.ID.String())
-						break
-					} else {
-						// fmt.Printf("Error connecting to peer %s (retry %d): %v\n", pi.ID.String(), i)
-						fmt.Printf("Node %s attempting to connect to peer %s at %v\n", *nodeID, pi.ID.String(), pi.Addrs)
-					}
-				}
-
-			}
-
-			// fmt.Printf("Node %s connected to %s\n", *nodeID, pi.ID.String())
-			fmt.Printf("Node %s connected to peer %s at %v\n", *nodeID, pi.ID.String(), pi.Addrs)
-			config.ConnectedPeers = append(config.ConnectedPeers, pi)
-			if len(config.ConnectedPeers) == config.ExpectedChunks {
-				log.Info("All nodes connected")
-			}
-			//
-			if *nodeID == "Node1" && (len(config.ConnectedPeers) == config.Nodes) {
-				fmt.Println("Node 1 is ready to broadcast chunks. Type 'start' to begin broadcasting.")
-				fmt.Println("Number of Peers:", len(config.ConnectedPeers))
-				<-broadcastSignal
-				config.StartTime = time.Now()
-				fmt.Println("Broadcasting chunks...")
-
-				originalFilePath := "eth_transactions.json"
-				originalData, err := os.ReadFile(originalFilePath)
-				if err != nil {
-					fmt.Printf("Node %s failed to read original data file: %v\n", *nodeID, err)
-					return
-				}
-
-				var chunks [][]byte
-				var originalLength int
-
-				if *codingMethod == "RS" {
-					chunks, err = rs.RSEncode(string(originalData))
-					if err != nil {
-						fmt.Printf("Node %s failed to encode data: %v\n", *nodeID, err)
-						return
-					}
-				} else if *codingMethod == "LT" {
-					fmt.Println("LT encoding")
-					chunks, err = lt.LTEncode(string(originalData))
-					// Size of each chunk in byte
-					fmt.Println("Size of each chunk in byte", len(chunks[0]))
-					if err != nil {
-						fmt.Printf("Node %s failed to encode data: %v\n", *nodeID, err)
-						return
-					}
-					// originalLength = len(string(originalData))
-					log.WithFields(logrus.Fields{"Original Length": originalLength}).Info("Org Size")
-				} else {
-					panic("Invalid coding method")
-				}
-
-				nodeData := config.NodeData{OriginalData: string(originalData), Chunks: chunks, Received: make(map[int][]byte)}
-				config.ReceivedChunks.Store(*nodeID, &nodeData)
-				fmt.Println("Leng of chunks", len(chunks))
-				for i := range config.ConnectedPeers {
-					if *codingMethod == "LT" {
-						fmt.Println("LT code broadcasting")
-						handlers.SendChunk(ctx, h, config.ConnectedPeers[i%len(chunks)], i%len(chunks), chunks[i%len(chunks)])
-						time.Sleep(50 * time.Millisecond)
-					} else {
-						handlers.SendChunk(ctx, h, config.ConnectedPeers[i%len(chunks)], i%len(chunks), chunks[i%len(chunks)])
-					}
-				}
-
-				break
-			}
-			time.Sleep(1 * time.Second)
-		}
-	}()
-
-	go func() {
-		for pi := range peerDataChan {
-			receivedChunk, ok := config.ReceivedChunks.Load(pi.ID.String())
-			fmt.Println("Received chunk from", pi.ID.String())
-			if !ok {
-				fmt.Printf("Warning: No chunk found for peer %s\n", pi.ID.String())
-				continue
-			}
-
-			nodeData := receivedChunk.(*config.NodeData)
-			for index, chunk := range nodeData.Received {
-				receivedFromKey := fmt.Sprintf("%s-%d", pi.ID.String(), index)
-				origSender, senderOk := config.ReceivedFrom.Load(receivedFromKey)
-
-				for i := 0; i < config.ExpectedChunks; i++ {
-					if config.ConnectedPeers[i].ID != pi.ID && config.ConnectedPeers[i].ID.String() != *nodeID && (senderOk && origSender.(string) == config.Node1ID.String()) {
-						chunkKey := fmt.Sprintf("%s-%d", config.ConnectedPeers[i].ID.String(), index)
-						if _, ok := config.SentChunks.Load(chunkKey); !ok {
-							fmt.Printf("Sending chunk %d to %s\n", index, config.ConnectedPeers[i].ID.String())
-							handlers.SendChunk(context.Background(), h, config.ConnectedPeers[i], index, chunk)
-							config.SentChunks.Store(chunkKey, struct{}{})
-							time.Sleep(50 * time.Millisecond)
+				if err := h.Connect(ctx, pi); err != nil {
+					fmt.Printf("Error connecting to peer %s (retry %d): %v\n", pi.ID.String(), 0, err)
+					for i := 1; i <= 10; i++ {
+						time.Sleep(5 * time.Second)
+						if err := h.Connect(ctx, pi); err == nil {
+							fmt.Println("Finally Succeed!!")
+							fmt.Printf("Node %s connected to %s\n", *nodeID, pi.ID.String())
+							break
 						} else {
-							fmt.Printf("Chunk %d already sent to %s\n", index, config.ConnectedPeers[i].ID.String())
+							// fmt.Printf("Error connecting to peer %s (retry %d): %v\n", pi.ID.String(), i)
+							fmt.Printf("Node %s attempting to connect to peer %s at %v\n", *nodeID, pi.ID.String(), pi.Addrs)
 						}
 					}
+
 				}
 
-			}
-		}
-	}()
+				// fmt.Printf("Node %s connected to %s\n", *nodeID, pi.ID.String())
+				fmt.Printf("Node %s connected to peer %s at %v\n", *nodeID, pi.ID.String(), pi.Addrs)
+				config.ConnectedPeers = append(config.ConnectedPeers, pi)
+				if len(config.ConnectedPeers) == config.ExpectedChunks {
+					log.Info("All nodes connected")
+				}
+				//
+				if *nodeID == "Node1" && (len(config.ConnectedPeers) == config.Nodes) {
+					fmt.Println("Node 1 is ready to broadcast chunks. Type 'start' to begin broadcasting.")
+					fmt.Println("Number of Peers:", len(config.ConnectedPeers))
+					<-broadcastSignal
+					config.StartTime = time.Now()
+					fmt.Println("Broadcasting chunks...")
 
+					originalFilePath := "eth_transactions.json"
+					originalData, err := os.ReadFile(originalFilePath)
+					if err != nil {
+						fmt.Printf("Node %s failed to read original data file: %v\n", *nodeID, err)
+						return
+					}
+
+					var chunks [][]byte
+					var originalLength int
+
+					if *codingMethod == "RS" {
+						chunks, err = rs.RSEncode(string(originalData))
+						if err != nil {
+							fmt.Printf("Node %s failed to encode data: %v\n", *nodeID, err)
+							return
+						}
+					} else if *codingMethod == "LT" {
+						fmt.Println("LT encoding")
+						chunks, err = lt.LTEncode(string(originalData))
+						// Size of each chunk in byte
+						fmt.Println("Size of each chunk in byte", len(chunks[0]))
+						if err != nil {
+							fmt.Printf("Node %s failed to encode data: %v\n", *nodeID, err)
+							return
+						}
+						// originalLength = len(string(originalData))
+						log.WithFields(logrus.Fields{"Original Length": originalLength}).Info("Org Size")
+					} else {
+						panic("Invalid coding method")
+					}
+
+					nodeData := config.NodeData{OriginalData: string(originalData), Chunks: chunks, Received: make(map[int][]byte)}
+					config.ReceivedChunks.Store(*nodeID, &nodeData)
+					fmt.Println("Leng of chunks", len(chunks))
+					for i := range config.ConnectedPeers {
+						if *codingMethod == "LT" {
+							fmt.Println("LT code broadcasting")
+							handlers.SendChunk(ctx, h, config.ConnectedPeers[i%len(chunks)], i%len(chunks), chunks[i%len(chunks)])
+							time.Sleep(50 * time.Millisecond)
+						} else {
+							handlers.SendChunk(ctx, h, config.ConnectedPeers[i%len(chunks)], i%len(chunks), chunks[i%len(chunks)])
+						}
+					}
+
+					break
+				}
+				time.Sleep(1 * time.Second)
+			}
+		}()
+
+		go func() {
+			for pi := range peerDataChan {
+				receivedChunk, ok := config.ReceivedChunks.Load(pi.ID.String())
+				fmt.Println("Received chunk from", pi.ID.String())
+				if !ok {
+					fmt.Printf("Warning: No chunk found for peer %s\n", pi.ID.String())
+					continue
+				}
+
+				nodeData := receivedChunk.(*config.NodeData)
+				for index, chunk := range nodeData.Received {
+					receivedFromKey := fmt.Sprintf("%s-%d", pi.ID.String(), index)
+					origSender, senderOk := config.ReceivedFrom.Load(receivedFromKey)
+
+					for i := 0; i < config.ExpectedChunks; i++ {
+						if config.ConnectedPeers[i].ID != pi.ID && config.ConnectedPeers[i].ID.String() != *nodeID && (senderOk && origSender.(string) == config.Node1ID.String()) {
+							chunkKey := fmt.Sprintf("%s-%d", config.ConnectedPeers[i].ID.String(), index)
+							if _, ok := config.SentChunks.Load(chunkKey); !ok {
+								fmt.Printf("Sending chunk %d to %s\n", index, config.ConnectedPeers[i].ID.String())
+								handlers.SendChunk(context.Background(), h, config.ConnectedPeers[i], index, chunk)
+								config.SentChunks.Store(chunkKey, struct{}{})
+								time.Sleep(50 * time.Millisecond)
+							} else {
+								fmt.Printf("Chunk %d already sent to %s\n", index, config.ConnectedPeers[i].ID.String())
+							}
+						}
+					}
+
+				}
+			}
+		}()
+	} else if *mode == "download" {
+		go func() {
+			for pi := range peerChan {
+				if err := h.Connect(ctx, pi); err != nil {
+					fmt.Printf("Error connecting to peer %s (retry %d): %v\n", pi.ID.String(), 0, err)
+					for i := 1; i <= 10; i++ {
+						time.Sleep(5 * time.Second)
+						if err := h.Connect(ctx, pi); err == nil {
+							fmt.Println("Finally Succeed!!")
+							fmt.Printf("Node %s connected to %s\n", *nodeID, pi.ID.String())
+							break
+						} else {
+							fmt.Printf("Node %s attempting to connect to peer %s at %v\n", *nodeID, pi.ID.String(), pi.Addrs)
+						}
+					}
+
+				}
+
+				fmt.Printf("Node %s connected to peer %s at %v\n", *nodeID, pi.ID.String(), pi.Addrs)
+				config.ConnectedPeers = append(config.ConnectedPeers, pi)
+				if len(config.ConnectedPeers) == config.ExpectedChunks {
+					log.Info("All nodes connected")
+				}
+
+				if *nodeID == "Node1" && (len(config.ConnectedPeers) == config.K) {
+					fmt.Println("Node 1 is ready to broadcast download request chunks. Type 'start' to begin broadcasting.")
+					fmt.Println("Number of Peers:", len(config.ConnectedPeers))
+					<-broadcastSignal
+					config.StartTime = time.Now()
+					fmt.Println("Broadcasting download request...")
+
+					for i := range config.K {
+						handlers.SendDownloadRequest(ctx, h, config.ConnectedPeers[i], config.ConnectedPeers[i].ID.String(), i)
+					}
+
+					break
+				}
+				// time.Sleep(1 * time.Second)
+			}
+		}()
+	}
+
+	// Listen for user input
 	go func() {
 		reader := bufio.NewReader(os.Stdin)
 		for {

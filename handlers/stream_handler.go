@@ -26,7 +26,7 @@ var log = logrus.New()
 
 var flag = true
 
-const subChunkSize = 256 * 1024 // 256 KB
+const subChunkSize = 1024 * 1024 // 256 KB
 const maxRetries = 5
 
 // Helper function to write sub-chunks to the stream
@@ -310,7 +310,8 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 
 		if config.Counter == config.ExpectedChunks {
 			log.WithFields(logrus.Fields{"nodeID": nodeID}).Info("Node complete received data")
-			// var decodedData string
+
+			var decodedData string
 			var err error
 			log.WithField("codingMethod", config.CodingMethod).Info("Node decoding data")
 			droplets := make([][]byte, 0, config.ExpectedChunks)
@@ -320,9 +321,9 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 						droplets = append(droplets, droplet)
 					}
 				}
-				_, err = lt.LTDecode(droplets)
+				decodedData, err = lt.LTDecode(droplets)
 			} else if config.CodingMethod == "RS" {
-				_, err = rs.RSDecode(config.ChunksRecByNode)
+				decodedData, err = rs.RSDecode(config.ChunksRecByNode)
 			}
 
 			if (err != nil) && (config.CodingMethod == "LT") {
@@ -337,22 +338,25 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 
 			log.WithFields(logrus.Fields{"nodeID": nodeID}).Info("Node reconstructed data")
 
-			// outputFilePath := fmt.Sprintf("output/%s_out.txt", config.NodeID)
-			// if err := os.WriteFile(outputFilePath, []byte(decodedData), 0644); err != nil {
-			// 	log.WithFields(logrus.Fields{"nodeID": nodeID, "Error": err}).Error("Node failed to write reconstructed data to file")
-			// 	return
-			// }
-
-			for _, peerInfo := range config.ConnectedPeers {
-				if peerInfo.ID.String() != nodeID {
-					readyKey := fmt.Sprintf("%s-ready", peerInfo.ID.String())
-					if _, ok := config.SentChunks.Load(readyKey); !ok {
-						SendReady(context.Background(), h, peerInfo, nodeID)
-						config.SentChunks.Store(readyKey, struct{}{})
+			outputFilePath := fmt.Sprintf("output/%s_out.txt", config.NodeID)
+			if err := os.WriteFile(outputFilePath, []byte(decodedData), 0644); err != nil {
+				log.WithFields(logrus.Fields{"nodeID": nodeID, "Error": err}).Error("Node failed to write reconstructed data to file")
+				return
+			}
+			if config.Mode == "upload" {
+				for _, peerInfo := range config.ConnectedPeers {
+					if peerInfo.ID.String() != nodeID {
+						readyKey := fmt.Sprintf("%s-ready", peerInfo.ID.String())
+						if _, ok := config.SentChunks.Load(readyKey); !ok {
+							SendReady(context.Background(), h, peerInfo, nodeID)
+							config.SentChunks.Store(readyKey, struct{}{})
+						}
 					}
 				}
+				time.Sleep(10 * time.Second)
+			} else if (config.Mode == "download")  {
+				logrus.WithField("Total time", time.Since(config.StartTime)).Info("Total time")
 			}
-			time.Sleep(10 * time.Second)
 		}
 	} else {
 		return
@@ -363,7 +367,6 @@ func HandleDownloadStream(s network.Stream, h host.Host, wg *sync.WaitGroup) {
 	defer s.Close()
 	defer wg.Done()
 
-	config.ReadyCounter++
 	reader := bufio.NewReader(s)
 	var chunkIndex int32
 	if err := binary.Read(reader, binary.LittleEndian, &chunkIndex); err != nil {
@@ -395,7 +398,7 @@ func HandleDownloadStream(s network.Stream, h host.Host, wg *sync.WaitGroup) {
 	SendChunk(context.Background(), h, peerInfo, int(chunkIndex), chunks[chunkIndex])
 }
 
-func SendDownloadRequest(ctx context.Context, h host.Host, pi peer.AddrInfo, peerID string, chunkIndex string) {
+func SendDownloadRequest(ctx context.Context, h host.Host, pi peer.AddrInfo, peerID string, chunkIndex int) {
 	s, err := h.NewStream(ctx, pi.ID, protocol.ID("/download"))
 	if err != nil {
 		fmt.Println("Error creating stream:", err)
@@ -404,7 +407,7 @@ func SendDownloadRequest(ctx context.Context, h host.Host, pi peer.AddrInfo, pee
 	defer s.Close()
 
 	writer := bufio.NewWriter(s)
-	if _, err := writer.WriteString(chunkIndex + "\n"); err != nil {
+	if err := binary.Write(s, binary.LittleEndian, int32(chunkIndex)); err != nil {
 		fmt.Println("Error writing to stream:", err)
 		s.Reset()
 		return

@@ -19,18 +19,18 @@ type NodeData struct {
 
 // Must change respected to the codign method
 const (
-	ExpectedChunks = 27
+	ExpectedChunks = 20
 )
 
 // Reed-Solomon parameters
 const (
-	DataShards   = 100
-	ParityShards = 10
+	DataShards   = 20
+	ParityShards = 4
 )
 
 // Luby-Transform parameters
 const (
-	LTSourceBlocks = 3
+	LTSourceBlocks = 10
 	RandomSeed     = 42
 )
 
@@ -47,7 +47,9 @@ const (
 var (
 	NodeID         string
 	CodingMethod   string
-	Nodes          = 30
+	Mode           string
+	Nodes          = 21
+	BazantineNodes = 3
 	ReceivedChunks = sync.Map{}
 	SentChunks     = sync.Map{}
 	NodeMutex      = sync.Mutex{}
@@ -61,5 +63,9 @@ var (
 	ChunksRecByNode = make([][]byte, DataShards+ParityShards)
 	ReadyCounter    = 0
 	StartTime       time.Time
-	OriginalLength  = 188762857
+	OriginalLength  = 18876679
+)
+
+var (
+	K = 20
 )
