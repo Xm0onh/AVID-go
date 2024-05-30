@@ -26,13 +26,16 @@ var log = logrus.New()
 
 var flag = true
 
-const subChunkSize = 1024 * 1024 // 256 KB
+const subChunkSize = 512 * 1024 // 256 KB
 const maxRetries = 5
 
 // Helper function to write sub-chunks to the stream
 func writeSubChunks(stream network.Stream, chunk []byte) error {
 	writer := bufio.NewWriterSize(stream, 4*subChunkSize) // Set buffer size
 	for offset := 0; offset < len(chunk); offset += subChunkSize {
+		sleepTemp := (100)
+		// sleep for sleepTemp milliseconds
+		time.Sleep(time.Duration(sleepTemp) * time.Millisecond)
 		end := offset + subChunkSize
 		if end > len(chunk) {
 			end = len(chunk)
@@ -153,7 +156,7 @@ func HandleStream(s network.Stream, h host.Host, peerChan chan peer.AddrInfo, wg
 			return
 		}
 		fmt.Println("Length of chunk: ", length)
-		if length > 100*1024*1024 {
+		if length > 200*1024*1024 {
 			fmt.Printf("Unreasonably large chunk length received: %d\n", length)
 			s.Reset()
 			return
@@ -311,7 +314,7 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 		if config.Counter == config.ExpectedChunks {
 			log.WithFields(logrus.Fields{"nodeID": nodeID}).Info("Node complete received data")
 
-			var decodedData string
+			var _ string
 			var err error
 			log.WithField("codingMethod", config.CodingMethod).Info("Node decoding data")
 			droplets := make([][]byte, 0, config.ExpectedChunks)
@@ -321,9 +324,9 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 						droplets = append(droplets, droplet)
 					}
 				}
-				decodedData, err = lt.LTDecode(droplets)
+				_, err = lt.LTDecode(droplets)
 			} else if config.CodingMethod == "RS" {
-				decodedData, err = rs.RSDecode(config.ChunksRecByNode)
+				_, err = rs.RSDecode(config.ChunksRecByNode)
 			}
 
 			if (err != nil) && (config.CodingMethod == "LT") {
@@ -338,11 +341,11 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 
 			log.WithFields(logrus.Fields{"nodeID": nodeID}).Info("Node reconstructed data")
 
-			outputFilePath := fmt.Sprintf("output/%s_out.txt", config.NodeID)
-			if err := os.WriteFile(outputFilePath, []byte(decodedData), 0644); err != nil {
-				log.WithFields(logrus.Fields{"nodeID": nodeID, "Error": err}).Error("Node failed to write reconstructed data to file")
-				return
-			}
+			// outputFilePath := fmt.Sprintf("output/%s_out.txt", config.NodeID)
+			// if err := os.WriteFile(outputFilePath, []byte(decodedData), 0644); err != nil {
+			// 	log.WithFields(logrus.Fields{"nodeID": nodeID, "Error": err}).Error("Node failed to write reconstructed data to file")
+			// 	return
+			// }
 			if config.Mode == "upload" {
 				for _, peerInfo := range config.ConnectedPeers {
 					if peerInfo.ID.String() != nodeID {
@@ -354,7 +357,7 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 					}
 				}
 				time.Sleep(10 * time.Second)
-			} else if (config.Mode == "download")  {
+			} else if config.Mode == "download" {
 				logrus.WithField("Total time", time.Since(config.StartTime)).Info("Total time")
 			}
 		}
@@ -366,6 +369,7 @@ func StoreReceivedChunk(nodeID string, chunkIndex int, chunk []byte, h host.Host
 func HandleDownloadStream(s network.Stream, h host.Host, wg *sync.WaitGroup) {
 	defer s.Close()
 	defer wg.Done()
+	// time.Sleep(int(200/config.K) * time.Millisecond)
 
 	reader := bufio.NewReader(s)
 	var chunkIndex int32

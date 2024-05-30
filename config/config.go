@@ -19,13 +19,13 @@ type NodeData struct {
 
 // Must change respected to the codign method
 const (
-	ExpectedChunks = 20
+	ExpectedChunks = 10
 )
 
 // Reed-Solomon parameters
 const (
-	DataShards   = 20
-	ParityShards = 4
+	DataShards   = 10
+	ParityShards = 2
 )
 
 // Luby-Transform parameters
@@ -48,7 +48,7 @@ var (
 	NodeID         string
 	CodingMethod   string
 	Mode           string
-	Nodes          = 21
+	Nodes          = 11
 	BazantineNodes = 3
 	ReceivedChunks = sync.Map{}
 	SentChunks     = sync.Map{}
@@ -67,5 +67,5 @@ var (
 )
 
 var (
-	K = 20
+	K = 10
 )
